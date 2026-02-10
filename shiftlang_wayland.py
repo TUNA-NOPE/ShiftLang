@@ -30,6 +30,7 @@ def load_config():
         "target_language": "english",
         "translation_provider": "google",  # "google" or "openrouter"
         "openrouter_api_key": "",  # Optional API key for OpenRouter
+        "clear_clipboard_after_paste": True,  # Clear clipboard after pasting to prevent history spam
     }
     if os.path.exists(CONFIG_PATH):
         try:
@@ -247,6 +248,10 @@ def translate():
         time.sleep(0.3)  # Wait for wl-copy to finish
         send_keys(_PASTE_KEYS)
         time.sleep(0.1)
+
+        # Clear clipboard if configured to prevent history spam
+        if config.get("clear_clipboard_after_paste", True):
+            set_clip("")
     except Exception as e:
         print(f"Translation error: {e}")
 

@@ -29,6 +29,7 @@ def load_config():
         "target_language": "english",
         "translation_provider": "google",  # "google" or "openrouter"
         "openrouter_api_key": "",  # Optional API key for OpenRouter
+        "clear_clipboard_after_paste": True,  # Clear clipboard after pasting to prevent history spam
     }
     if os.path.exists(CONFIG_PATH):
         try:
@@ -372,6 +373,10 @@ def translate_text():
         if copy_to_clipboard_no_history(translated):
             keyboard.press_and_release(_PASTE_KEYS)
             time.sleep(0.1)
+
+            # 7. Clear clipboard if configured to prevent history spam
+            if config.get("clear_clipboard_after_paste", True):
+                pyperclip.copy("")
         else:
             print("Failed to copy to clipboard.")
 

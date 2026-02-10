@@ -221,9 +221,11 @@ def create_virtualenv():
 
 # ──────────────────────── Install dependencies ─────────────
 def install_dependencies():
-    req = os.path.join(PROJECT_DIR, "requirements.txt")
+    # Use Linux-specific requirements if on Linux, otherwise use base requirements
+    req_file = "requirements-linux.txt" if OS_NAME == "Linux" else "requirements.txt"
+    req = os.path.join(PROJECT_DIR, req_file)
     if not os.path.exists(req):
-        print(red("    ✗ requirements.txt not found"))
+        print(red(f"    ✗ {req_file} not found"))
         return False
 
     # Create venv if it doesn't exist
