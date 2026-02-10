@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-ShiftLang Installer — Interactive one-step setup
-Run:  python install.py   (or python3 install.py)
+ShiftLang Installer — One-step setup & update
+Run:  python install.py          (interactive)
+Run:  python install.py --auto   (silent/automatic)
+Run:  python install.py --update (update existing install)
 """
 
 import os
@@ -10,20 +12,32 @@ import json
 import platform
 import subprocess
 import shutil
+import argparse
+import time
 
 # ──────────────────────── Constants ────────────────────────
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "ShiftLang"
-MAIN_SCRIPT = os.path.join(PROJECT_DIR, "main.py")
+OS_NAME = platform.system()
+
+# Detect display server on Linux
+IS_WAYLAND = False
+if OS_NAME == "Linux":
+    IS_WAYLAND = (
+        os.environ.get("WAYLAND_DISPLAY") is not None
+        or "wayland" in os.environ.get("XDG_SESSION_TYPE", "").lower()
+    )
+
+MAIN_SCRIPT = os.path.join(
+    PROJECT_DIR, "shiftlang_wayland.py" if IS_WAYLAND else "main.py"
+)
 
 DEFAULTS = {
     "Windows": "ctrl+shift+q",
-    "Darwin": "cmd+shift+g",      # macOS
-    "Linux": "alt+shift+g",
+    "Darwin": "cmd+shift+g",
+    "Linux": "alt+shift+g" if IS_WAYLAND else "ctrl+shift+q",
 }
-
-OS_NAME = platform.system()  # 'Windows' | 'Darwin' | 'Linux'
 
 
 # ──────────────────────── Helpers ──────────────────────────
@@ -41,268 +55,83 @@ def color(text, code):
     return f"\033[{code}m{text}\033[0m"
 
 
-def green(t):  return color(t, "92")
-def cyan(t):   return color(t, "96")
-def yellow(t): return color(t, "93")
-def red(t):    return color(t, "91")
-def bold(t):   return color(t, "1")
-def dim(t):    return color(t, "2")
+def green(t):
+    return color(t, "92")
+
+
+def cyan(t):
+    return color(t, "96")
+
+
+def yellow(t):
+    return color(t, "93")
+
+
+def red(t):
+    return color(t, "91")
+
+
+def bold(t):
+    return color(t, "1")
+
+
+def dim(t):
+    return color(t, "2")
 
 
 def banner():
     print()
     print(cyan("╔══════════════════════════════════════════════╗"))
-    print(cyan("║") + bold("       ⚡  ShiftLang Installer  ⚡            ") + cyan("║"))
+    print(
+        cyan("║") + bold("       ⚡  ShiftLang Installer  ⚡            ") + cyan("║")
+    )
     print(cyan("║") + "  Instant translation between any languages   " + cyan("║"))
+    if IS_WAYLAND:
+        print(cyan("║") + "  [Wayland mode detected]                     " + cyan("║"))
     print(cyan("╚══════════════════════════════════════════════╝"))
     print()
 
 
-def ask_choice(question, options, note=None):
-    """Arrow-key choice selector. Returns the 0-based index chosen."""
-    cursor = 0
+# ──────────────────────── Linux Input Group Check ──────────
+def check_input_group():
+    """Check if user is in input group (required for Wayland)."""
+    if OS_NAME != "Linux":
+        return True
 
-    def draw_choice():
-        clear_screen()
-        print(bold(question))
-        if note:
-            print(dim(f"  ℹ  {note}"))
-        print(dim("  ↑/↓ to move  |  Enter to confirm"))
-        print()
-        for i, opt in enumerate(options):
-            if i == cursor:
-                print(f"  {cyan('►')} {bold(opt)}")
-            else:
-                print(f"    {dim(opt)}")
-        sys.stdout.flush()
+    try:
+        import grp
 
-    draw_choice()
-
-    while True:
-        key = _read_key()
-        if key == "UP" and cursor > 0:
-            cursor -= 1
-            draw_choice()
-        elif key == "DOWN" and cursor < len(options) - 1:
-            cursor += 1
-            draw_choice()
-        elif key == "ENTER":
-            print()
-            return cursor
+        user = os.environ.get("USER", os.environ.get("USERNAME", ""))
+        input_group = grp.getgrnam("input")
+        return user in input_group.gr_mem
+    except:
+        return False
 
 
-def ask_input(prompt, default=None):
-    """Simple text input with optional default."""
-    suffix = f" [{default}]" if default else ""
-    val = input(f"  {prompt}{suffix}: ").strip()
-    return val if val else default
-
-
-# ──────────────── Raw Key Input (cross-platform) ───────────
-def _read_key():
-    """
-    Read a single keypress and return a normalized string:
-    'UP', 'DOWN', 'SPACE', 'ENTER', 'BACKSPACE',
-    or the character itself for printable keys.
-    """
-    if OS_NAME == "Windows":
-        import msvcrt
-        ch = msvcrt.getwch()
-        if ch in ('\x00', '\xe0'):  # special key prefix
-            ch2 = msvcrt.getwch()
-            if ch2 == 'H':
-                return 'UP'
-            elif ch2 == 'P':
-                return 'DOWN'
-            elif ch2 == 'K':
-                return 'LEFT'
-            elif ch2 == 'M':
-                return 'RIGHT'
-            return 'UNKNOWN'
-        elif ch == '\r':
-            return 'ENTER'
-        elif ch == ' ':
-            return 'SPACE'
-        elif ch == '\x08':
-            return 'BACKSPACE'
-        elif ch == '\x1b':
-            return 'ESC'
+def add_user_to_input_group():
+    """Add current user to input group."""
+    user = os.environ.get("USER", os.environ.get("USERNAME", ""))
+    print(yellow(f"  Adding {user} to 'input' group..."))
+    try:
+        result = subprocess.run(
+            ["sudo", "usermod", "-a", "-G", "input", user],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(green("  ✓ User added to input group"))
+            print(
+                yellow(
+                    "  ⚠ You'll need to log out and back in for changes to take effect"
+                )
+            )
+            return True
         else:
-            return ch
-    else:
-        import tty
-        import termios
-        fd = sys.stdin.fileno()
-        old = termios.tcgetattr(fd)
-        try:
-            tty.setraw(fd)
-            ch = sys.stdin.read(1)
-            if ch == '\x1b':
-                ch2 = sys.stdin.read(1)
-                if ch2 == '[':
-                    ch3 = sys.stdin.read(1)
-                    if ch3 == 'A':
-                        return 'UP'
-                    elif ch3 == 'B':
-                        return 'DOWN'
-                    elif ch3 == 'C':
-                        return 'RIGHT'
-                    elif ch3 == 'D':
-                        return 'LEFT'
-                return 'ESC'
-            elif ch == '\r' or ch == '\n':
-                return 'ENTER'
-            elif ch == ' ':
-                return 'SPACE'
-            elif ch == '\x7f' or ch == '\x08':
-                return 'BACKSPACE'
-            else:
-                return ch
-        finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-
-# ──────────────── Interactive Language Selector ────────────
-def ask_language(prompt, languages, default=None):
-    """
-    Interactive language selector with arrow keys and live search.
-    ↑/↓ to navigate, Space to select, Enter to confirm.
-    Just type to search — the search box is always active.
-    """
-    VIEWPORT_SIZE = 15  # visible rows at a time
-
-    all_languages = list(languages)
-    items = list(all_languages)
-    cursor = 0        # highlighted row
-    selected = set()  # indices of selected items (in the `items` list — we track by name)
-    selected_names = []  # ordered list of selected language names (max 2)
-    scroll_top = 0    # first visible index
-    search_query = ""
-
-    def ensure_visible():
-        """Scroll viewport so cursor is visible."""
-        nonlocal scroll_top
-        if cursor < scroll_top:
-            scroll_top = cursor
-        elif cursor >= scroll_top + VIEWPORT_SIZE:
-            scroll_top = cursor - VIEWPORT_SIZE + 1
-
-    def draw_full():
-        """Clear screen and redraw everything."""
-        nonlocal scroll_top
-        ensure_visible()
-        total = len(items)
-
-        clear_screen()
-
-        # Title
-        print(bold(prompt))
-        print()
-
-        # Selection status
-        if len(selected_names) == 0:
-            print(dim("  Select 2 languages (0/2 selected)"))
-        elif len(selected_names) == 1:
-            print(f"  {green('●')} {bold(selected_names[0])}  {dim('(1/2 — select one more)')}")
-        else:
-            print(f"  {green('●')} {bold(selected_names[0])}  ↔  {green('●')} {bold(selected_names[1])}  {green('(2/2 ✓ press Enter to confirm)')}")
-        print()
-
-        # Search box (always visible)
-        if search_query:
-            print(f"  🔍 Search: {bold(search_query)}█")
-        else:
-            print(f"  🔍 Search: {dim('type to filter...')}")
-        print()
-
-        # Controls hint
-        print(dim("  ↑/↓ move  |  Space toggle  |  Enter confirm  |  Backspace clear search"))
-        print()
-
-        # Language rows
-        if total == 0:
-            print(red("  No languages match your search."))
-        else:
-            end = min(scroll_top + VIEWPORT_SIZE, total)
-            for idx in range(scroll_top, end):
-                lang = items[idx]
-                num = f"{idx + 1:>4}"
-                is_selected = lang in selected_names
-                is_cursor = idx == cursor
-
-                if is_cursor and is_selected:
-                    print(f"  {cyan('►')} {green('●')} {cyan(num)}  {bold(green(lang))}")
-                elif is_cursor:
-                    print(f"  {cyan('►')}   {cyan(num)}  {bold(lang)}")
-                elif is_selected:
-                    print(f"    {green('●')} {num}  {green(lang)}")
-                else:
-                    print(f"      {dim(num)}  {lang}")
-
-            # Scroll hint at bottom
-            if total > VIEWPORT_SIZE:
-                above = scroll_top
-                below = total - (scroll_top + VIEWPORT_SIZE)
-                hints = []
-                if above > 0:
-                    hints.append(f"↑ {above} more above")
-                if below > 0:
-                    hints.append(f"↓ {below} more below")
-                print(dim(f"\n  {' | '.join(hints)}"))
-
-        sys.stdout.flush()
-
-    # Initial draw
-    draw_full()
-
-    while True:
-        key = _read_key()
-
-        if key == 'UP' and cursor > 0:
-            cursor -= 1
-            draw_full()
-        elif key == 'DOWN' and cursor < len(items) - 1:
-            cursor += 1
-            draw_full()
-        elif key == 'SPACE':
-            if len(items) > 0:
-                lang = items[cursor]
-                if lang in selected_names:
-                    # Deselect
-                    selected_names.remove(lang)
-                elif len(selected_names) < 2:
-                    # Select (max 2)
-                    selected_names.append(lang)
-                # If already 2 selected and trying to add a third, ignore
-                draw_full()
-        elif key == 'ENTER':
-            if len(selected_names) == 2:
-                clear_screen()
-                print(green(f"  → Languages: {selected_names[0]} ↔ {selected_names[1]}"))
-                print()
-                return selected_names
-            # If not exactly 2, ignore Enter
-        elif key == 'BACKSPACE':
-            if search_query:
-                search_query = search_query[:-1]
-                if search_query:
-                    items = [l for l in all_languages if search_query.lower() in l.lower()]
-                else:
-                    items = list(all_languages)
-                cursor = 0
-                scroll_top = 0
-                draw_full()
-        elif isinstance(key, str) and len(key) == 1 and key.isprintable():
-            # Live search: typing filters the list
-            new_query = search_query + key
-            filtered = [l for l in all_languages if new_query.lower() in l.lower()]
-            if filtered:
-                search_query = new_query
-                items = filtered
-                cursor = 0
-                scroll_top = 0
-            draw_full()
-
+            print(red(f"  ✗ Failed: {result.stderr}"))
+            return False
+    except Exception as e:
+        print(red(f"  ✗ Error: {e}"))
+        return False
 
 
 # ──────────────────────── Prerequisite Checks ──────────────
@@ -341,7 +170,7 @@ def check_git():
         return True
     else:
         print(yellow("Not found (optional)"))
-        return True  # not blocking
+        return True
 
 
 # ──────────────────────── Install dependencies ─────────────
@@ -371,21 +200,58 @@ def get_supported_languages():
     """Fetch the list of supported languages from GoogleTranslator."""
     try:
         from deep_translator import GoogleTranslator
+
         langs = GoogleTranslator().get_supported_languages()
         return sorted(langs)
     except Exception as e:
         print(red(f"  Failed to fetch supported languages: {e}"))
         # Fallback minimal list
-        return sorted([
-            "english", "hebrew", "spanish", "french", "german", "italian",
-            "portuguese", "russian", "chinese (simplified)", "chinese (traditional)",
-            "japanese", "korean", "arabic", "turkish", "dutch", "polish",
-            "swedish", "danish", "norwegian", "finnish", "greek", "czech",
-            "romanian", "hungarian", "thai", "vietnamese", "indonesian",
-            "malay", "filipino", "hindi", "bengali", "urdu", "persian",
-            "ukrainian", "bulgarian", "croatian", "serbian", "slovak",
-            "slovenian", "estonian", "latvian", "lithuanian",
-        ])
+        return sorted(
+            [
+                "english",
+                "hebrew",
+                "spanish",
+                "french",
+                "german",
+                "italian",
+                "portuguese",
+                "russian",
+                "chinese (simplified)",
+                "chinese (traditional)",
+                "japanese",
+                "korean",
+                "arabic",
+                "turkish",
+                "dutch",
+                "polish",
+                "swedish",
+                "danish",
+                "norwegian",
+                "finnish",
+                "greek",
+                "czech",
+                "romanian",
+                "hungarian",
+                "thai",
+                "vietnamese",
+                "indonesian",
+                "malay",
+                "filipino",
+                "hindi",
+                "bengali",
+                "urdu",
+                "persian",
+                "ukrainian",
+                "bulgarian",
+                "croatian",
+                "serbian",
+                "slovak",
+                "slovenian",
+                "estonian",
+                "latvian",
+                "lithuanian",
+            ]
+        )
 
 
 # ──────────────────────── Auto-start Setup ─────────────────
@@ -393,7 +259,11 @@ def setup_autostart_windows():
     try:
         startup = os.path.join(
             os.environ.get("APPDATA", ""),
-            "Microsoft", "Windows", "Start Menu", "Programs", "Startup",
+            "Microsoft",
+            "Windows",
+            "Start Menu",
+            "Programs",
+            "Startup",
         )
         os.makedirs(startup, exist_ok=True)
         python_exe = sys.executable
@@ -455,10 +325,18 @@ def setup_autostart_linux():
         os.makedirs(autostart_dir, exist_ok=True)
         python_exe = sys.executable
         desktop_path = os.path.join(autostart_dir, f"{APP_NAME}.desktop")
+
+        # Use different startup commands for Wayland vs X11
+        if IS_WAYLAND:
+            # Wayland needs to wait for session to be ready
+            exec_cmd = f"sh -c 'sleep 5 && {python_exe} {MAIN_SCRIPT}'"
+        else:
+            exec_cmd = f"{python_exe} {MAIN_SCRIPT}"
+
         desktop_content = f"""[Desktop Entry]
 Type=Application
 Name={APP_NAME}
-Exec={python_exe} {MAIN_SCRIPT}
+Exec={exec_cmd}
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
@@ -488,44 +366,311 @@ def setup_autostart():
 
 # ──────────────────────── Save Config ──────────────────────
 def save_config(hotkey, auto_start, source_lang, target_lang):
-    config = {
+    cfg = {
         "hotkey": hotkey,
         "auto_start": auto_start,
         "source_language": source_lang,
         "target_language": target_lang,
     }
     with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=2)
+        json.dump(cfg, f, indent=2)
     print(green(f"  Preferences saved to config.json ✓"))
 
-# ──────────────────────── Preferences Questionnaire ────────
-def run_questionnaire():
-    """Run the interactive preferences questionnaire (Phase 2)."""
+
+def load_config():
+    """Load existing config."""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    return None
+
+
+# ──────────────────────── Start ShiftLang ─────────────────
+def start_shiftlang():
+    """Start ShiftLang in the background."""
+    print(dim("  Starting ShiftLang..."))
+    try:
+        if OS_NAME == "Windows":
+            subprocess.Popen(
+                [sys.executable, MAIN_SCRIPT],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+            )
+        else:
+            # Start in background, suppress output
+            subprocess.Popen(
+                [sys.executable, MAIN_SCRIPT],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        print(green("  ✓ ShiftLang started in background"))
+        return True
+    except Exception as e:
+        print(red(f"  ✗ Failed to start: {e}"))
+        return False
+
+
+# ──────────────────────── Interactive Mode ─────────────────
+def ask_choice(question, options, note=None):
+    """Arrow-key choice selector. Returns the 0-based index chosen."""
+    cursor = 0
+
+    def draw_choice():
+        clear_screen()
+        print(bold(question))
+        if note:
+            print(dim(f"  ℹ  {note}"))
+        print(dim("  ↑/↓ to move  |  Enter to confirm"))
+        print()
+        for i, opt in enumerate(options):
+            if i == cursor:
+                print(f"  {cyan('►')} {bold(opt)}")
+            else:
+                print(f"    {dim(opt)}")
+        sys.stdout.flush()
+
+    draw_choice()
+
+    while True:
+        key = _read_key()
+        if key == "UP" and cursor > 0:
+            cursor -= 1
+            draw_choice()
+        elif key == "DOWN" and cursor < len(options) - 1:
+            cursor += 1
+            draw_choice()
+        elif key == "ENTER":
+            print()
+            return cursor
+
+
+def ask_input(prompt, default=None):
+    """Simple text input with optional default."""
+    suffix = f" [{default}]" if default else ""
+    val = input(f"  {prompt}{suffix}: ").strip()
+    return val if val else default
+
+
+def _read_key():
+    """Read a single keypress and return a normalized string."""
+    if OS_NAME == "Windows":
+        import msvcrt
+
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            ch2 = msvcrt.getwch()
+            if ch2 == "H":
+                return "UP"
+            elif ch2 == "P":
+                return "DOWN"
+            elif ch2 == "K":
+                return "LEFT"
+            elif ch2 == "M":
+                return "RIGHT"
+            return "UNKNOWN"
+        elif ch == "\r":
+            return "ENTER"
+        elif ch == " ":
+            return "SPACE"
+        elif ch == "\x08":
+            return "BACKSPACE"
+        elif ch == "\x1b":
+            return "ESC"
+        else:
+            return ch
+    else:
+        import tty
+        import termios
+
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+            if ch == "\x1b":
+                ch2 = sys.stdin.read(1)
+                if ch2 == "[":
+                    ch3 = sys.stdin.read(1)
+                    if ch3 == "A":
+                        return "UP"
+                    elif ch3 == "B":
+                        return "DOWN"
+                    elif ch3 == "C":
+                        return "RIGHT"
+                    elif ch3 == "D":
+                        return "LEFT"
+                return "ESC"
+            elif ch == "\r" or ch == "\n":
+                return "ENTER"
+            elif ch == " ":
+                return "SPACE"
+            elif ch == "\x7f" or ch == "\x08":
+                return "BACKSPACE"
+            else:
+                return ch
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def ask_language(prompt, languages, default=None):
+    """Interactive language selector with arrow keys and live search."""
+    VIEWPORT_SIZE = 15
+    all_languages = list(languages)
+    items = list(all_languages)
+    cursor = 0
+    selected_names = []
+    scroll_top = 0
+    search_query = ""
+
+    def ensure_visible():
+        nonlocal scroll_top
+        if cursor < scroll_top:
+            scroll_top = cursor
+        elif cursor >= scroll_top + VIEWPORT_SIZE:
+            scroll_top = cursor - VIEWPORT_SIZE + 1
+
+    def draw_full():
+        nonlocal scroll_top
+        ensure_visible()
+        total = len(items)
+        clear_screen()
+        print(bold(prompt))
+        print()
+        if len(selected_names) == 0:
+            print(dim("  Select 2 languages (0/2 selected)"))
+        elif len(selected_names) == 1:
+            print(
+                f"  {green('●')} {bold(selected_names[0])}  {dim('(1/2 — select one more)')}"
+            )
+        else:
+            print(
+                f"  {green('●')} {bold(selected_names[0])}  ↔  {green('●')} {bold(selected_names[1])}  {green('(2/2 ✓ press Enter to confirm)')}"
+            )
+        print()
+        if search_query:
+            print(f"  🔍 Search: {bold(search_query)}█")
+        else:
+            print(f"  🔍 Search: {dim('type to filter...')}")
+        print()
+        print(
+            dim(
+                "  ↑/↓ move  |  Space toggle  |  Enter confirm  |  Backspace clear search"
+            )
+        )
+        print()
+        if total == 0:
+            print(red("  No languages match your search."))
+        else:
+            end = min(scroll_top + VIEWPORT_SIZE, total)
+            for idx in range(scroll_top, end):
+                lang = items[idx]
+                num = f"{idx + 1:>4}"
+                is_selected = lang in selected_names
+                is_cursor = idx == cursor
+                if is_cursor and is_selected:
+                    print(
+                        f"  {cyan('►')} {green('●')} {cyan(num)}  {bold(green(lang))}"
+                    )
+                elif is_cursor:
+                    print(f"  {cyan('►')}   {cyan(num)}  {bold(lang)}")
+                elif is_selected:
+                    print(f"    {green('●')} {num}  {green(lang)}")
+                else:
+                    print(f"      {dim(num)}  {lang}")
+            if total > VIEWPORT_SIZE:
+                above = scroll_top
+                below = total - (scroll_top + VIEWPORT_SIZE)
+                hints = []
+                if above > 0:
+                    hints.append(f"↑ {above} more above")
+                if below > 0:
+                    hints.append(f"↓ {below} more below")
+                print(dim(f"\n  {' | '.join(hints)}"))
+        sys.stdout.flush()
+
+    draw_full()
+    while True:
+        key = _read_key()
+        if key == "UP" and cursor > 0:
+            cursor -= 1
+            draw_full()
+        elif key == "DOWN" and cursor < len(items) - 1:
+            cursor += 1
+            draw_full()
+        elif key == "SPACE":
+            if len(items) > 0:
+                lang = items[cursor]
+                if lang in selected_names:
+                    selected_names.remove(lang)
+                elif len(selected_names) < 2:
+                    selected_names.append(lang)
+                draw_full()
+        elif key == "ENTER":
+            if len(selected_names) == 2:
+                clear_screen()
+                print(
+                    green(f"  → Languages: {selected_names[0]} ↔ {selected_names[1]}")
+                )
+                print()
+                return selected_names
+        elif key == "BACKSPACE":
+            if search_query:
+                search_query = search_query[:-1]
+                if search_query:
+                    items = [
+                        l for l in all_languages if search_query.lower() in l.lower()
+                    ]
+                else:
+                    items = list(all_languages)
+                cursor = 0
+                scroll_top = 0
+                draw_full()
+        elif isinstance(key, str) and len(key) == 1 and key.isprintable():
+            new_query = search_query + key
+            filtered = [l for l in all_languages if new_query.lower() in l.lower()]
+            if filtered:
+                search_query = new_query
+                items = filtered
+                cursor = 0
+                scroll_top = 0
+            draw_full()
+
+
+def run_interactive_setup():
+    """Run the interactive preferences questionnaire."""
     print(cyan("══════════════════════════════════════════════"))
     print(cyan("║") + bold("       📋  Preferences Questionnaire         ") + cyan("║"))
     print(cyan("══════════════════════════════════════════════"))
     print()
 
-    # --- Q1: Select 2 languages ---
+    # Check input group for Wayland
+    if IS_WAYLAND and not check_input_group():
+        print(yellow("  ⚠ Wayland requires your user to be in the 'input' group"))
+        choice = ask_choice(
+            "Add your user to the 'input' group?",
+            [
+                "Yes — add me to input group (requires sudo)",
+                "No — I'll do it manually later",
+            ],
+        )
+        if choice == 0:
+            add_user_to_input_group()
+        print()
+
     print(dim("  Fetching supported languages..."))
     languages = get_supported_languages()
     print(green(f"  {len(languages)} languages available ✓"))
     print()
 
-    chosen_langs = ask_language(
-        "1) Select your 2 languages:",
-        languages,
-    )
+    chosen_langs = ask_language("1) Select your 2 languages:", languages)
     source_lang = chosen_langs[0]
     target_lang = chosen_langs[1]
 
-    # --- Q2: Auto-start ---
     default_hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
-
-    if OS_NAME == "Windows":
-        run_cmd = "python main.py"
-    else:
-        run_cmd = "python3 main.py"
+    run_cmd = "python main.py" if OS_NAME == "Windows" else "python3 main.py"
 
     auto_start_choice = ask_choice(
         "2) Do you want ShiftLang to run automatically when the computer starts?",
@@ -536,7 +681,6 @@ def run_questionnaire():
     )
     auto_start = auto_start_choice == 0
 
-    # --- Q3: Hotkey ---
     if OS_NAME == "Darwin":
         default_label = f"Default: {cyan('Cmd+Shift+G')} (macOS)"
     else:
@@ -553,29 +697,32 @@ def run_questionnaire():
     if hotkey_choice == 0:
         hotkey = default_hotkey
     else:
-        print(yellow("  ⚠  Make sure your chosen combination does not conflict with"))
+        print(yellow("  ⚠ Make sure your chosen combination does not conflict with"))
         print(yellow("     other applications or system shortcuts on your OS."))
         print()
         print(dim("  Format examples: ctrl+shift+t, alt+g, cmd+shift+k"))
-        hotkey = ask_input("Enter your preferred hotkey combination", default=default_hotkey)
+        hotkey = ask_input(
+            "Enter your preferred hotkey combination", default=default_hotkey
+        )
         if not hotkey:
             hotkey = default_hotkey
     print()
 
-    # ════════════════════════════════════════════
-    #  Applying settings
-    # ════════════════════════════════════════════
+    # Apply settings
     print(bold("─── Applying settings ───"))
     print()
-
     save_config(hotkey, auto_start, source_lang, target_lang)
-
     if auto_start:
         setup_autostart()
-
     print()
 
-    # ── Done ──
+    # Start now
+    print(bold("─── Starting ShiftLang ───"))
+    print()
+    start_shiftlang()
+    print()
+
+    # Done
     print(cyan("══════════════════════════════════════════════"))
     print(green(bold("  ✅  ShiftLang is ready!")))
     print(cyan("══════════════════════════════════════════════"))
@@ -584,50 +731,100 @@ def run_questionnaire():
     print(f"  Hotkey:      {bold(hotkey)}")
     print(f"  Auto-start:  {bold('Enabled' if auto_start else 'Disabled')}")
     print()
-    if not auto_start:
-        print(f"  To run ShiftLang manually:")
-        print(f"    {cyan('cd ' + PROJECT_DIR)}")
-        print(f"    {cyan(run_cmd)}")
+    if IS_WAYLAND and not check_input_group():
+        print(yellow("  ⚠ Remember to log out and back in for input group changes!"))
         print()
-    else:
-        print(f"  ShiftLang will start automatically on next boot.")
-        print(f"  To run it right now:")
-        print(f"    {cyan('cd ' + PROJECT_DIR)}")
-        print(f"    {cyan(run_cmd)}")
+    if auto_start:
+        print(f"  ShiftLang will also start automatically on next boot.")
         print()
     print(dim("  Happy translating! ⚡"))
     print()
 
 
+# ──────────────────────── Silent/Auto Mode ─────────────────
+def run_auto_setup():
+    """Run automatic setup with defaults or existing config."""
+    existing = load_config()
+
+    if existing:
+        print(dim("  Existing config found, using saved preferences..."))
+        hotkey = existing.get("hotkey", DEFAULTS.get(OS_NAME, "ctrl+shift+q"))
+        auto_start = existing.get("auto_start", True)
+        source_lang = existing.get("source_language", "hebrew")
+        target_lang = existing.get("target_language", "english")
+    else:
+        print(dim("  No existing config, using defaults..."))
+        hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
+        auto_start = True
+        source_lang = "hebrew"
+        target_lang = "english"
+
+    print()
+    save_config(hotkey, auto_start, source_lang, target_lang)
+
+    if auto_start:
+        setup_autostart()
+
+    print()
+    start_shiftlang()
+    print()
+
+    print(green(bold("✅ ShiftLang is running!")))
+    print(f"  Languages: {source_lang} ↔ {target_lang}")
+    print(f"  Hotkey: {hotkey}")
+    print()
+
+
 # ──────────────────────── Main Installer Flow ──────────────
 def main():
-    reconfigure = "--reconfigure" in sys.argv or "-r" in sys.argv
+    parser = argparse.ArgumentParser(description="ShiftLang Installer")
+    parser.add_argument(
+        "--auto", "-a", action="store_true", help="Automatic/silent mode"
+    )
+    parser.add_argument(
+        "--update", "-u", action="store_true", help="Update existing install"
+    )
+    parser.add_argument(
+        "--reconfigure", "-r", action="store_true", help="Reconfigure settings"
+    )
+    args = parser.parse_args()
 
-    clear_screen()
-    banner()
+    silent_mode = args.auto or args.update
 
-    if reconfigure:
-        # Skip installation, go straight to preferences
-        print(dim("  Reconfiguring ShiftLang settings..."))
-        print()
-        run_questionnaire()
+    if not silent_mode:
+        clear_screen()
+        banner()
+
+    if args.reconfigure:
+        if not silent_mode:
+            print(dim("  Reconfiguring ShiftLang settings..."))
+            print()
+        run_interactive_setup()
         return
 
-    # ════════════════════════════════════════════
-    #  PHASE 1 — Installation (automatic, quiet)
-    # ════════════════════════════════════════════
-    print(bold("─── Installing ShiftLang ───"))
-    print()
+    # Check if this is an update
+    is_update = args.update or os.path.exists(CONFIG_FILE)
+
+    if is_update and silent_mode:
+        print(dim("  Updating ShiftLang..."))
+    elif not silent_mode:
+        print(bold("─── Installing ShiftLang ───"))
+        print()
 
     # Prerequisites
-    ok = check_python() and check_pip()
-    check_git()
-    print()
-    if not ok:
-        print(red("Prerequisites check failed. Please fix the issues above and re-run."))
-        sys.exit(1)
-    print(green("  All prerequisites met!"))
-    print()
+    if not silent_mode:
+        ok = check_python() and check_pip()
+        check_git()
+        print()
+        if not ok:
+            print(
+                red(
+                    "Prerequisites check failed. Please fix the issues above and re-run."
+                )
+            )
+            sys.exit(1)
+        print(green("  All prerequisites met!"))
+        print()
 
     # Dependencies
     if not install_dependencies():
@@ -635,11 +832,15 @@ def main():
         sys.exit(1)
     print()
 
-    print(green(bold("  Installation complete ✓")))
-    print()
+    if not silent_mode:
+        print(green(bold("  Installation complete ✓")))
+        print()
 
-    # PHASE 2 — Preferences
-    run_questionnaire()
+    # Setup mode
+    if silent_mode:
+        run_auto_setup()
+    else:
+        run_interactive_setup()
 
 
 if __name__ == "__main__":

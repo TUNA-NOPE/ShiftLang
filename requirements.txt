@@ -1,3 +1,4 @@
 keyboard
 pyperclip
 deep-translator
+evdev
