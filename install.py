@@ -648,6 +648,7 @@ def _read_key():
     else:
         import tty
         import termios
+        import os
 
         if not sys.stdin.isatty():
             line = sys.stdin.readline()
@@ -664,15 +665,20 @@ def _read_key():
                 return "ESC"
             return first_char
 
-        fd = sys.stdin.fileno()
+        try:
+            fd = os.open("/dev/tty", os.O_RDONLY)
+            use_dev_tty = True
+        except OSError:
+            fd = sys.stdin.fileno()
+            use_dev_tty = False
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            ch = sys.stdin.read(1)
+            ch = os.read(fd, 1).decode()
             if ch == "\x1b":
-                ch2 = sys.stdin.read(1)
+                ch2 = os.read(fd, 1).decode()
                 if ch2 == "[":
-                    ch3 = sys.stdin.read(1)
+                    ch3 = os.read(fd, 1).decode()
                     if ch3 == "A":
                         return "UP"
                     elif ch3 == "B":
@@ -691,6 +697,8 @@ def _read_key():
             else:
                 return ch
         finally:
+            if use_dev_tty:
+                os.close(fd)
             termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
@@ -819,18 +827,6 @@ def ask_language(prompt, languages, default=None):
 
 def run_interactive_setup(args=None):
     """Run the interactive preferences questionnaire."""
-    # Detect non-interactive mode (piped stdin, no TTY)
-    is_interactive = sys.stdin.isatty()
-
-    # In non-interactive mode, require --auto flag
-    if not is_interactive and not (args and getattr(args, "auto", False)):
-        print(yellow("    ⚠ Interactive mode detected but stdin is not a terminal"))
-        print()
-        print(dim("    Run with --auto flag for non-interactive mode:"))
-        print(f"    {bold('python install.py --auto')}")
-        print()
-        sys.exit(1)
-
     # Welcome screen - wait for user to press Enter
     print(dim("    Press Enter to begin setup..."))
     print()
