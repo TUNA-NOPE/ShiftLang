@@ -30,7 +30,7 @@ if OS_NAME == "Linux":
     )
 
 MAIN_SCRIPT = os.path.join(
-    PROJECT_DIR, "shiftlang_wayland.py" if IS_WAYLAND else "main.py"
+    PROJECT_DIR, "shiftlang_wayland.py" if IS_WAYLAND else "main.pyw"
 )
 
 DEFAULTS = {
