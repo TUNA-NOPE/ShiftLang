@@ -83,11 +83,17 @@ def banner():
     print()
     print(cyan("   ╭───────────────────────────────────────────────╮"))
     print(cyan("   │                                               │"))
-    print(cyan("   │     ") + bold("⚡  S H I F T L A N G  ⚡") + cyan("              │"))
+    print(
+        cyan("   │     ") + bold("⚡  S H I F T L A N G  ⚡") + cyan("              │")
+    )
     print(cyan("   │                                               │"))
     print(cyan("   │     ") + dim("Instant translation, any language") + cyan("     │"))
     if IS_WAYLAND:
-        print(cyan("   │     ") + dim("Running on Wayland") + cyan("                    │"))
+        print(
+            cyan("   │     ")
+            + dim("Running on Wayland")
+            + cyan("                    │")
+        )
     print(cyan("   │                                               │"))
     print(cyan("   ╰───────────────────────────────────────────────╯"))
     print()
@@ -505,7 +511,15 @@ def setup_autostart():
 
 
 # ──────────────────────── Save Config ──────────────────────
-def save_config(hotkey, auto_start, source_lang, target_lang, provider="google", api_key="", model="openrouter/free"):
+def save_config(
+    hotkey,
+    auto_start,
+    source_lang,
+    target_lang,
+    provider="google",
+    api_key="",
+    model="openrouter/free",
+):
     cfg = {
         "hotkey": hotkey,
         "auto_start": auto_start,
@@ -693,9 +707,7 @@ def ask_language(prompt, languages, default=None):
         if len(selected_names) == 0:
             print(dim("    Select 2 languages") + dim(" · 0/2"))
         elif len(selected_names) == 1:
-            print(
-                f"    {green('✓')} {selected_names[0]}  {dim('· 1/2')}"
-            )
+            print(f"    {green('✓')} {selected_names[0]}  {dim('· 1/2')}")
         else:
             print(
                 f"    {green('✓')} {selected_names[0]}  {dim('→')}  {green('✓')} {selected_names[1]}  {green('· 2/2')}"
@@ -733,7 +745,11 @@ def ask_language(prompt, languages, default=None):
                 print()
                 print(dim(f"    {' · '.join(hints)}"))
         print()
-        print(dim("    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit"))
+        print(
+            dim(
+                "    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit"
+            )
+        )
         sys.stdout.flush()
 
     draw_full()
@@ -791,7 +807,11 @@ def run_interactive_setup(args=None):
     # Welcome screen - wait for user to press Enter
     print(dim("    Press Enter to begin setup..."))
     print()
-    input()
+    # Skip waiting in non-interactive mode (piped input or --auto)
+    try:
+        input()
+    except (EOFError, OSError):
+        pass  # Non-interactive, skip waiting
 
     clear_screen()
     print()
@@ -838,7 +858,7 @@ def run_interactive_setup(args=None):
             "Google Translate (Fast, free, no setup)",
             "OpenRouter AI (More accurate, requires internet)",
         ],
-        note="Google Translate is recommended for most users"
+        note="Google Translate is recommended for most users",
     )
     if provider_choice is None:
         print(dim("    Cancelled"))
@@ -866,7 +886,7 @@ def run_interactive_setup(args=None):
                 "GPT-4o Mini (paid, excellent translation quality)",
                 "Llama 3.3 70B (paid, efficient, high quality)",
             ],
-            note="Free models don't require payment, paid models need API credits"
+            note="Free models don't require payment, paid models need API credits",
         )
         if model_choice is None:
             print(dim("    Cancelled"))
@@ -892,7 +912,9 @@ def run_interactive_setup(args=None):
         print()
         if is_free_model:
             print(green("    ✓") + " Free model selected - no API key required")
-            print(dim("    (You can optionally add an API key for rate limit increases)"))
+            print(
+                dim("    (You can optionally add an API key for rate limit increases)")
+            )
             print()
             api_key = ask_input("OpenRouter API key (optional)", default="").strip()
         else:
@@ -951,7 +973,10 @@ def run_interactive_setup(args=None):
                         }
                         model = free_model_map[free_model_choice]
                         print()
-                        print(green("    ✓") + " Free model selected - no API key required")
+                        print(
+                            green("    ✓")
+                            + " Free model selected - no API key required"
+                        )
                         api_key = ""
                         break
                     print()
@@ -998,9 +1023,7 @@ def run_interactive_setup(args=None):
         print()
         print(dim("    Examples: ctrl+shift+t, alt+g, cmd+shift+k"))
         print()
-        hotkey = ask_input(
-            "Enter hotkey", default=default_hotkey
-        )
+        hotkey = ask_input("Enter hotkey", default=default_hotkey)
         if not hotkey:
             hotkey = default_hotkey
     print()
@@ -1009,7 +1032,15 @@ def run_interactive_setup(args=None):
     print()
     print(dim("  Saving configuration..."))
     print()
-    save_config(hotkey, auto_start, source_lang, target_lang, provider, api_key, model if provider == "openrouter" else "")
+    save_config(
+        hotkey,
+        auto_start,
+        source_lang,
+        target_lang,
+        provider,
+        api_key,
+        model if provider == "openrouter" else "",
+    )
     if auto_start:
         setup_autostart()
     print()
@@ -1025,7 +1056,7 @@ def run_interactive_setup(args=None):
     print()
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
-    if provider == 'google':
+    if provider == "google":
         print(f"    Provider     {dim('Google Translate')}")
     else:
         print(f"    Provider     {dim('OpenRouter AI')}")
@@ -1085,7 +1116,7 @@ def run_auto_setup(args=None):
     print(green("  ✓") + " " + bold("Ready"))
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
-    if provider == 'google':
+    if provider == "google":
         print(f"    Provider     {dim('Google Translate')}")
     else:
         print(f"    Provider     {dim('OpenRouter AI')}")
