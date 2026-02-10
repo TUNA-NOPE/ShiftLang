@@ -5,6 +5,7 @@ A lightweight background tool that instantly translates selected text between an
 ## Features
 
 - **Any-to-any translation** — supports 130+ languages via Google Translate
+- **AI-powered translation** — use OpenRouter LLM for more accurate translations (optional)
 - **Hotkey-driven** — press a hotkey to translate any selected text in-place
 - **Auto language detection** — detects the input language and translates accordingly
 - **Clipboard-safe** — translated text is excluded from Windows Clipboard History
@@ -49,7 +50,11 @@ The installer will automatically:
 1. Check your Python version and git
 2. Create a virtual environment (uses `uv` if available, otherwise `venv`)
 3. Install all dependencies into the isolated environment
-4. Guide you through a preferences questionnaire (languages, auto-start, hotkey)
+4. Guide you through a preferences questionnaire:
+   - **Language selection** (choose 2 languages)
+   - **Translation provider** (Google Translate or OpenRouter AI)
+   - **Auto-start preference**
+   - **Hotkey configuration**
 5. Configure everything for you
 
 ## Usage
@@ -57,6 +62,45 @@ The installer will automatically:
 1. Select any text in any application.
 2. Press your configured hotkey (default: **Ctrl+Shift+Q**).
 3. The selected text is replaced with its translation.
+
+## Translation Providers
+
+ShiftLang supports two translation providers (you can choose during installation):
+
+### Google Translate (Default)
+- ✓ Very fast (instant)
+- ✓ Free, unlimited
+- ✓ No setup required
+- ✓ 130+ languages
+- Best for general use
+
+### OpenRouter AI
+- ✓ More accurate translations
+- ✓ Better context understanding
+- ✓ AI-powered (uses `openrouter/free` model)
+- ✓ Free tier available (optional API key for higher limits)
+- Best for important or complex translations
+
+### Choosing Your Provider
+
+**During installation:**
+The installer will ask which provider you want to use.
+
+**After installation:**
+Edit your `config.json` to switch providers:
+
+```json
+{
+  "hotkey": "ctrl+shift+q",
+  "auto_start": true,
+  "source_language": "english",
+  "target_language": "hebrew",
+  "translation_provider": "openrouter",
+  "openrouter_api_key": ""
+}
+```
+
+**Note:** The `openrouter_api_key` field is optional. The free tier works without an API key, but you can get an API key from [OpenRouter](https://openrouter.ai/) for higher rate limits.
 
 ## Reconfigure Settings
 
@@ -116,6 +160,7 @@ ShiftLang/
 | `keyboard`        | Global hotkey registration       |
 | `pyperclip`       | Cross-platform clipboard access  |
 | `deep-translator` | Google Translate API wrapper     |
+| `requests`        | HTTP client for OpenRouter API   |
 
 ### System Requirements
 

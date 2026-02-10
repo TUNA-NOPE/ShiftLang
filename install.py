@@ -503,12 +503,15 @@ def setup_autostart():
 
 
 # ──────────────────────── Save Config ──────────────────────
-def save_config(hotkey, auto_start, source_lang, target_lang):
+def save_config(hotkey, auto_start, source_lang, target_lang, provider="google", api_key="", model="openrouter/free"):
     cfg = {
         "hotkey": hotkey,
         "auto_start": auto_start,
         "source_language": source_lang,
         "target_language": target_lang,
+        "translation_provider": provider,
+        "openrouter_api_key": api_key,
+        "openrouter_model": model,
     }
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
@@ -826,6 +829,135 @@ def run_interactive_setup(args=None):
     source_lang = languages[chosen_langs[0]]
     target_lang = languages[chosen_langs[1]]
 
+    # Ask about translation provider
+    provider_choice = ask_choice(
+        "Choose translation provider",
+        [
+            "Google Translate (Fast, free, no setup)",
+            "OpenRouter AI (More accurate, requires internet)",
+        ],
+        note="Google Translate is recommended for most users"
+    )
+    if provider_choice is None:
+        print(dim("    Cancelled"))
+        print()
+        sys.exit(0)
+
+    if provider_choice == 0:
+        provider = "google"
+        api_key = ""
+        model = ""
+    else:
+        provider = "openrouter"
+
+        # Ask for model selection first
+        print()
+        model_choice = ask_choice(
+            "Choose OpenRouter model",
+            [
+                "Free Auto-Router (automatic model selection)",
+                "Gemini 2.0 Flash Exp (free, very fast, experimental)",
+                "Llama 3.1 8B (free, fast, good for translation)",
+                "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
+                "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
+                "Gemini Flash 1.5 (paid, $0.075/$0.30 per M tokens, ~2.3s)",
+                "GPT-4o Mini (paid, excellent translation quality)",
+                "Llama 3.3 70B (paid, efficient, high quality)",
+            ],
+            note="Free models don't require payment, paid models need API credits"
+        )
+        if model_choice is None:
+            print(dim("    Cancelled"))
+            print()
+            sys.exit(0)
+
+        # Map choice to model ID
+        model_map = {
+            0: "openrouter/free",
+            1: "google/gemini-2.0-flash-exp:free",
+            2: "meta-llama/llama-3.1-8b-instruct:free",
+            3: "nvidia/nemotron-3-nano-30b-a3b:free",
+            4: "arcee-ai/trinity-mini:free",
+            5: "google/gemini-flash-1.5",
+            6: "openai/gpt-4o-mini",
+            7: "meta-llama/llama-3.3-70b-instruct",
+        }
+        model = model_map[model_choice]
+
+        # Determine if API key is required
+        is_free_model = model_choice in [0, 1, 2, 3, 4]
+
+        print()
+        if is_free_model:
+            print(green("    ✓") + " Free model selected - no API key required")
+            print(dim("    (You can optionally add an API key for rate limit increases)"))
+            print()
+            api_key = ask_input("OpenRouter API key (optional)", default="").strip()
+        else:
+            print(yellow("    ⚠ This model requires an API key with credits"))
+            print()
+            print(dim("    Get a free API key at:"))
+            print(cyan("    https://openrouter.ai/keys"))
+            print()
+            print(dim("    Note: You'll need to add credits ($5 minimum)"))
+            print()
+
+            api_key = ""
+            while not api_key:
+                api_key = ask_input("OpenRouter API key (required)", default="").strip()
+                if not api_key:
+                    print()
+                    choice = ask_choice(
+                        "API key is required for paid models",
+                        [
+                            "Enter API key now",
+                            "Switch to Google Translate instead",
+                            "Choose a free OpenRouter model",
+                        ],
+                    )
+                    if choice == 1:
+                        # Switch to Google
+                        provider = "google"
+                        api_key = ""
+                        model = ""
+                        print()
+                        break
+                    elif choice == 2:
+                        # Go back to model selection with free models
+                        print()
+                        free_model_choice = ask_choice(
+                            "Choose a free OpenRouter model",
+                            [
+                                "Free Auto-Router (automatic model selection)",
+                                "Gemini 2.0 Flash Exp (free, very fast, experimental)",
+                                "Llama 3.1 8B (free, fast, good for translation)",
+                                "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
+                                "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
+                            ],
+                        )
+                        if free_model_choice is None:
+                            print(dim("    Cancelled"))
+                            print()
+                            sys.exit(0)
+
+                        free_model_map = {
+                            0: "openrouter/free",
+                            1: "google/gemini-2.0-flash-exp:free",
+                            2: "meta-llama/llama-3.1-8b-instruct:free",
+                            3: "nvidia/nemotron-3-nano-30b-a3b:free",
+                            4: "arcee-ai/trinity-mini:free",
+                        }
+                        model = free_model_map[free_model_choice]
+                        print()
+                        print(green("    ✓") + " Free model selected - no API key required")
+                        api_key = ""
+                        break
+                    print()
+
+        if provider == "openrouter" and api_key:
+            print(green("    ✓") + " API key configured")
+        print()
+
     default_hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
 
     auto_start_choice = ask_choice(
@@ -875,7 +1007,7 @@ def run_interactive_setup(args=None):
     print()
     print(dim("  Saving configuration..."))
     print()
-    save_config(hotkey, auto_start, source_lang, target_lang)
+    save_config(hotkey, auto_start, source_lang, target_lang, provider, api_key, model if provider == "openrouter" else "")
     if auto_start:
         setup_autostart()
     print()
@@ -891,6 +1023,11 @@ def run_interactive_setup(args=None):
     print()
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
+    if provider == 'google':
+        print(f"    Provider     {dim('Google Translate')}")
+    else:
+        print(f"    Provider     {dim('OpenRouter AI')}")
+        print(f"    Model        {dim(model if model else 'openrouter/free')}")
     print(f"    Hotkey       {dim(hotkey)}")
     print(f"    Auto-start   {dim('enabled' if auto_start else 'disabled')}")
     print()
@@ -917,18 +1054,24 @@ def run_auto_setup(args=None):
         auto_start = existing.get("auto_start", True)
         source_lang = existing.get("source_language", "hebrew")
         target_lang = existing.get("target_language", "english")
+        provider = existing.get("translation_provider", "google")
+        api_key = existing.get("openrouter_api_key", "")
+        model = existing.get("openrouter_model", "openrouter/free")
     else:
         print(dim("    Using default configuration"))
         hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
         auto_start = True
         source_lang = "hebrew"
         target_lang = "english"
+        provider = "google"
+        api_key = ""
+        model = "openrouter/free"
 
     if args and getattr(args, "esc", False):
         hotkey = "esc"
 
     print()
-    save_config(hotkey, auto_start, source_lang, target_lang)
+    save_config(hotkey, auto_start, source_lang, target_lang, provider, api_key, model)
 
     if auto_start:
         setup_autostart()
@@ -940,6 +1083,11 @@ def run_auto_setup(args=None):
     print(green("  ✓") + " " + bold("Ready"))
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
+    if provider == 'google':
+        print(f"    Provider     {dim('Google Translate')}")
+    else:
+        print(f"    Provider     {dim('OpenRouter AI')}")
+        print(f"    Model        {dim(model if model else 'openrouter/free')}")
     print(f"    Hotkey       {dim(hotkey)}")
     print()
     print()

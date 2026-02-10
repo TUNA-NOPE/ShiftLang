@@ -2,3 +2,4 @@ keyboard
 pyperclip
 deep-translator
 evdev
+requests

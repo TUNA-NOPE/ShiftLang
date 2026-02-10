@@ -28,6 +28,8 @@ def load_config():
         "auto_start": False,
         "source_language": "hebrew",
         "target_language": "english",
+        "translation_provider": "google",  # "google" or "openrouter"
+        "openrouter_api_key": "",  # Optional API key for OpenRouter
     }
     if os.path.exists(CONFIG_PATH):
         try:
@@ -46,20 +48,47 @@ print(f"DEBUG: Hotkey to register: {config['hotkey']}")
 try:
     from evdev import InputDevice, categorize, ecodes
     from deep_translator import GoogleTranslator
+    from openrouter_translator import OpenRouterTranslator
 except ImportError as e:
     print(f"Missing dependency: {e}")
     print("Install with: pip install evdev deep-translator")
     sys.exit(1)
 
 # ──────────────────────── Translators (cached) ─────────────
-_translator_forward = GoogleTranslator(
-    source=config["source_language"],
-    target=config["target_language"],
-)
-_translator_reverse = GoogleTranslator(
-    source=config["target_language"],
-    target=config["source_language"],
-)
+def _create_translators():
+    """Create translator instances based on configured provider."""
+    provider = config.get("translation_provider", "google").lower()
+
+    if provider == "openrouter":
+        api_key = config.get("openrouter_api_key", "")
+        model = config.get("openrouter_model", "openrouter/free")
+        forward = OpenRouterTranslator(
+            source=config["source_language"],
+            target=config["target_language"],
+            api_key=api_key,
+            model=model
+        )
+        reverse = OpenRouterTranslator(
+            source=config["target_language"],
+            target=config["source_language"],
+            api_key=api_key,
+            model=model
+        )
+        print(f"Using OpenRouter AI translator (model: {model})")
+    else:  # default to google
+        forward = GoogleTranslator(
+            source=config["source_language"],
+            target=config["target_language"],
+        )
+        reverse = GoogleTranslator(
+            source=config["target_language"],
+            target=config["source_language"],
+        )
+        print(f"Using Google Translator")
+
+    return forward, reverse
+
+_translator_forward, _translator_reverse = _create_translators()
 
 # ──────────────────────── Language Detection Helper ────────
 _LANGUAGE_UNICODE_RANGES = {
@@ -180,26 +209,36 @@ def translate():
 
     # Detect direction & translate
     try:
+        provider = config.get("translation_provider", "google").lower()
         is_source = _detect_is_source_language(text)
 
-        if is_source is None:
-            # Both languages use Latin script — use auto-detect
-            auto_translator = GoogleTranslator(
-                source="auto", target=config["target_language"]
-            )
-            translated = auto_translator.translate(text)
-            # If auto resulted in the same text, try the reverse direction
-            if translated and translated.strip().lower() == text.strip().lower():
+        if provider == "openrouter":
+            # OpenRouter: Use LLM's intelligence to detect language automatically
+            # Try forward translation first
+            translated = _translator_forward.translate(text)
+            # If result is same as input, try reverse
+            if translated.strip().lower() == text.strip().lower():
+                translated = _translator_reverse.translate(text)
+        else:
+            # Google Translator: Use script-based detection
+            if is_source is None:
+                # Both languages use Latin script — use auto-detect
                 auto_translator = GoogleTranslator(
-                    source="auto", target=config["source_language"]
+                    source="auto", target=config["target_language"]
                 )
                 translated = auto_translator.translate(text)
-        elif is_source:
-            # Text is in source language → translate to target
-            translated = _translator_forward.translate(text)
-        else:
-            # Text is in target language → translate to source
-            translated = _translator_reverse.translate(text)
+                # If auto resulted in the same text, try the reverse direction
+                if translated and translated.strip().lower() == text.strip().lower():
+                    auto_translator = GoogleTranslator(
+                        source="auto", target=config["source_language"]
+                    )
+                    translated = auto_translator.translate(text)
+            elif is_source:
+                # Text is in source language → translate to target
+                translated = _translator_forward.translate(text)
+            else:
+                # Text is in target language → translate to source
+                translated = _translator_reverse.translate(text)
 
         print(f"Translated: {translated}")
 
