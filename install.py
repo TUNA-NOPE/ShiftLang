@@ -649,6 +649,21 @@ def _read_key():
         import tty
         import termios
 
+        if not sys.stdin.isatty():
+            line = sys.stdin.readline()
+            if not line:
+                return "ENTER"
+            first_char = line[0]
+            if first_char == "\n" or first_char == "\r":
+                return "ENTER"
+            elif first_char == " ":
+                return "SPACE"
+            elif first_char == "\x7f" or first_char == "\x08":
+                return "BACKSPACE"
+            elif first_char == "\x1b":
+                return "ESC"
+            return first_char
+
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         try:
