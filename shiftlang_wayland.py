@@ -118,21 +118,25 @@ def get_clip():
 
 def set_clip(text):
     """Write to clipboard via wl-copy."""
-    proc = subprocess.Popen(
-        ["wl-copy"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    if proc.stdin is not None:
-        proc.stdin.write(text.encode())
-        proc.stdin.close()
-    time.sleep(0.15)
-    proc.terminate()
+    proc = None
     try:
-        proc.wait(timeout=0.3)
-    except:
-        proc.kill()
+        # Use communicate() to properly send data and wait
+        proc = subprocess.Popen(
+            ["wl-copy"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if proc.stdin is not None:
+            proc.stdin.write(text.encode())
+            proc.stdin.close()
+        # Wait for process to finish with timeout
+        proc.wait(timeout=0.5)
+    except subprocess.TimeoutExpired:
+        if proc:
+            proc.kill()
+    except Exception as e:
+        print(f"Clipboard write error: {e}")
 
 
 # ──────────────────────── Key Sending ──────────────────────
@@ -154,16 +158,16 @@ _PASTE_KEYS = "ctrl+v"
 
 def translate():
     """Main translation flow."""
-    time.sleep(0.15)
+    time.sleep(0.2)  # Wait for hotkey release
 
     orig = get_clip()
     send_keys(_COPY_KEYS)
-    time.sleep(0.15)
+    time.sleep(0.2)  # Wait for copy to complete
 
-    # Wait for clipboard
+    # Wait for clipboard with longer timeout
     text = ""
-    for _ in range(10):
-        time.sleep(0.05)
+    for _ in range(20):  # 20 * 0.1s = 2 seconds max
+        time.sleep(0.1)
         text = get_clip()
         if text and text != orig:
             break
@@ -199,10 +203,11 @@ def translate():
 
         print(f"Translated: {translated}")
 
-        # Paste
+        # Paste - need more time for clipboard to update
         set_clip(translated)
-        time.sleep(0.1)
+        time.sleep(0.3)  # Wait for wl-copy to finish
         send_keys(_PASTE_KEYS)
+        time.sleep(0.1)
     except Exception as e:
         print(f"Translation error: {e}")
 

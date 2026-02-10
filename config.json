@@ -1,6 +1,6 @@
 {
   "hotkey": "ctrl+shift+q",
   "auto_start": true,
-  "source_language": "hebrew",
-  "target_language": "english"
+  "source_language": "english",
+  "target_language": "hebrew"
 }

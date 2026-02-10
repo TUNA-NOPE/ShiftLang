@@ -35,8 +35,8 @@ MAIN_SCRIPT = os.path.join(
 
 DEFAULTS = {
     "Windows": "ctrl+shift+q",
-    "Darwin": "cmd+shift+g",
-    "Linux": "alt+shift+g" if IS_WAYLAND else "ctrl+shift+q",
+    "Darwin": "ctrl+shift+q",
+    "Linux": "ctrl+shift+q",
 }
 
 
@@ -173,6 +173,54 @@ def check_git():
         return True
 
 
+# ──────────────────────── Virtual Environment ──────────────
+VENV_DIR = os.path.join(PROJECT_DIR, ".venv")
+VENV_PYTHON = (
+    os.path.join(VENV_DIR, "bin", "python")
+    if OS_NAME != "Windows"
+    else os.path.join(VENV_DIR, "Scripts", "python.exe")
+)
+
+
+def has_uv():
+    """Check if uv is available."""
+    return shutil.which("uv") is not None
+
+
+def create_virtualenv():
+    """Create a virtual environment in the project directory."""
+    print(dim(f"  Creating virtual environment at {VENV_DIR}..."))
+
+    # Try uv first (faster)
+    if has_uv():
+        result = subprocess.run(
+            ["uv", "venv", VENV_DIR], cwd=PROJECT_DIR, capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(green("  ✓ Virtual environment created with uv"))
+            return True
+        else:
+            print(yellow(f"  uv venv failed: {result.stderr}"))
+
+    # Fall back to standard venv
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "venv", VENV_DIR],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            print(green("  ✓ Virtual environment created"))
+            return True
+        else:
+            print(red(f"  venv creation failed: {result.stderr}"))
+            return False
+    except Exception as e:
+        print(red(f"  Failed to create venv: {e}"))
+        return False
+
+
 # ──────────────────────── Install dependencies ─────────────
 def install_dependencies():
     req = os.path.join(PROJECT_DIR, "requirements.txt")
@@ -180,10 +228,32 @@ def install_dependencies():
         print(red("  requirements.txt not found!"))
         return False
 
-    print(dim("  Running: pip install -r requirements.txt ..."))
+    # Create venv if it doesn't exist
+    if not os.path.exists(VENV_PYTHON):
+        print(dim("  Virtual environment not found, creating one..."))
+        if not create_virtualenv():
+            return False
+        print()
+
+    # Install into venv
+    print(dim(f"  Installing dependencies into virtual environment..."))
     print()
+
+    # Try uv pip (fastest)
+    if has_uv():
+        result = subprocess.run(
+            ["uv", "pip", "install", "-r", req, "--python", VENV_PYTHON],
+            cwd=PROJECT_DIR,
+        )
+        if result.returncode == 0:
+            print(green("  Dependencies installed successfully with uv ✓"))
+            return True
+        else:
+            print(yellow("  uv pip install failed, trying venv pip..."))
+
+    # Fall back to venv pip
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-r", req],
+        [VENV_PYTHON, "-m", "pip", "install", "-r", req],
         cwd=PROJECT_DIR,
     )
     print()
@@ -255,6 +325,11 @@ def get_supported_languages():
 
 
 # ──────────────────────── Auto-start Setup ─────────────────
+def get_venv_python():
+    """Get the path to the venv Python executable."""
+    return VENV_PYTHON if os.path.exists(VENV_PYTHON) else sys.executable
+
+
 def setup_autostart_windows():
     try:
         startup = os.path.join(
@@ -264,6 +339,12 @@ def setup_autostart_windows():
             "Start Menu",
             "Programs",
             "Startup",
+        )
+        os.makedirs(startup, exist_ok=True)
+        python_exe = get_venv_python()
+        vbs_content = (
+            f'Set WshShell = CreateObject("WScript.Shell")\n'
+            f'WshShell.Run """{python_exe}"" ""{MAIN_SCRIPT}""", 0, False\n'
         )
         os.makedirs(startup, exist_ok=True)
         python_exe = sys.executable
@@ -286,7 +367,7 @@ def setup_autostart_mac():
     try:
         agents_dir = os.path.expanduser("~/Library/LaunchAgents")
         os.makedirs(agents_dir, exist_ok=True)
-        python_exe = sys.executable
+        python_exe = get_venv_python()
         plist_path = os.path.join(agents_dir, f"com.shiftlang.app.plist")
         plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -323,7 +404,7 @@ def setup_autostart_linux():
     try:
         autostart_dir = os.path.expanduser("~/.config/autostart")
         os.makedirs(autostart_dir, exist_ok=True)
-        python_exe = sys.executable
+        python_exe = get_venv_python()
         desktop_path = os.path.join(autostart_dir, f"{APP_NAME}.desktop")
 
         # Use different startup commands for Wayland vs X11
@@ -392,16 +473,17 @@ def load_config():
 def start_shiftlang():
     """Start ShiftLang in the background."""
     print(dim("  Starting ShiftLang..."))
+    python_exe = get_venv_python()
     try:
         if OS_NAME == "Windows":
             subprocess.Popen(
-                [sys.executable, MAIN_SCRIPT],
+                [python_exe, MAIN_SCRIPT],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         else:
             # Start in background, suppress output
             subprocess.Popen(
-                [sys.executable, MAIN_SCRIPT],
+                [python_exe, MAIN_SCRIPT],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
