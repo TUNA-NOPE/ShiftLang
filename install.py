@@ -819,6 +819,18 @@ def ask_language(prompt, languages, default=None):
 
 def run_interactive_setup(args=None):
     """Run the interactive preferences questionnaire."""
+    # Detect non-interactive mode (piped stdin, no TTY)
+    is_interactive = sys.stdin.isatty()
+
+    # In non-interactive mode, require --auto flag
+    if not is_interactive and not (args and getattr(args, "auto", False)):
+        print(yellow("    ⚠ Interactive mode detected but stdin is not a terminal"))
+        print()
+        print(dim("    Run with --auto flag for non-interactive mode:"))
+        print(f"    {bold('python install.py --auto')}")
+        print()
+        sys.exit(1)
+
     # Welcome screen - wait for user to press Enter
     print(dim("    Press Enter to begin setup..."))
     print()
