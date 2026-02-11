@@ -7,13 +7,17 @@ set -e
 REPO_URL="https://github.com/TUNA-NOPE/ShiftLang.git"
 INSTALL_DIR="$HOME/ShiftLang"
 FORCE_REFRESH=0
+INSTALL_ARGS=()
 
-# Parse arguments
+# Parse arguments - separate install-remote args from install.py args
 for arg in "$@"; do
     case $arg in
         --force|-f)
             FORCE_REFRESH=1
-            shift
+            ;;
+        *)
+            # Pass through to install.py
+            INSTALL_ARGS+=("$arg")
             ;;
     esac
 done
@@ -72,9 +76,9 @@ fi
 
 echo ""
 
-# Run the installer
+# Run the installer - only pass through install.py compatible args
 if command -v python3 &>/dev/null; then
-    python3 scripts/install.py "$@"
+    python3 scripts/install.py "${INSTALL_ARGS[@]}"
 else
-    python scripts/install.py "$@"
+    python scripts/install.py "${INSTALL_ARGS[@]}"
 fi
