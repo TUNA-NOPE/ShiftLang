@@ -23,10 +23,19 @@ OS_NAME = platform.system()
 def get_project_dir():
     """Determine the project directory, handling both normal and temp execution."""
     # First, try the script's parent directory (normal case)
-    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script_path = os.path.abspath(__file__)
+    script_dir = os.path.dirname(os.path.dirname(script_path))
+    
+    # Debug output
+    print(f"    Debug: Script path: {script_path}")
+    print(f"    Debug: Initial project dir: {script_dir}")
     
     # Check if this looks like a valid project dir (has requirements folder)
-    if os.path.exists(os.path.join(script_dir, "requirements")):
+    req_check = os.path.join(script_dir, "requirements")
+    print(f"    Debug: Checking requirements at: {req_check}")
+    print(f"    Debug: Requirements exists: {os.path.exists(req_check)}")
+    
+    if os.path.exists(req_check):
         return script_dir
     
     # If not, try the standard install locations
@@ -36,11 +45,16 @@ def get_project_dir():
         os.path.join(home, ".shiftlang"),  # Alternative location
     ]
     
+    print(f"    Debug: Home directory: {home}")
     for loc in standard_locations:
-        if os.path.exists(os.path.join(loc, "requirements")):
+        req_path = os.path.join(loc, "requirements")
+        print(f"    Debug: Checking: {req_path} -> {os.path.exists(req_path)}")
+        if os.path.exists(req_path):
+            print(f"    Debug: Found valid project dir: {loc}")
             return loc
     
     # Fallback: return script's parent and let the error handling below deal with it
+    print(f"    Debug: Falling back to: {script_dir}")
     return script_dir
 
 

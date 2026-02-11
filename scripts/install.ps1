@@ -6,8 +6,7 @@
 param(
     [switch]$Auto,
     [switch]$Update,
-    [switch]$Reconfigure,
-    [switch]$NoSelfUpdate
+    [switch]$Reconfigure
 )
 
 $ErrorActionPreference = "Stop"
@@ -78,8 +77,51 @@ function Test-Git {
     return $gitCmd.Source
 }
 
+function Ensure-Requirements {
+    <#
+    Ensures requirements directory and files exist.
+    Downloads from GitHub if missing.
+    #>
+    param(
+        [string]$ReqDir
+    )
+    
+    # Create requirements directory if it doesn't exist
+    if (-not (Test-Path $ReqDir)) {
+        Write-Host "    Creating requirements directory..." -ForegroundColor DarkGray
+        New-Item -ItemType Directory -Path $ReqDir -Force | Out-Null
+    }
+    
+    # Download requirements files if missing
+    $reqFiles = @(
+        @{ Name = "requirements.txt"; Critical = $true },
+        @{ Name = "requirements-base.txt"; Critical = $false },
+        @{ Name = "linux.txt"; Critical = $false }
+    )
+    
+    foreach ($req in $reqFiles) {
+        $reqPath = Join-Path $ReqDir $req.Name
+        if (-not (Test-Path $reqPath)) {
+            $reqUrl = "$RAW_URL/requirements/$($req.Name)"
+            Write-Host "    Downloading $($req.Name)..." -ForegroundColor DarkGray
+            try {
+                Invoke-WebRequest -Uri $reqUrl -OutFile $reqPath -UseBasicParsing -ErrorAction Stop
+                Write-Host "    ✓ Downloaded $($req.Name)" -ForegroundColor Green
+            }
+            catch {
+                if ($req.Critical) {
+                    Write-Host "    ✗ Failed to download $($req.Name): $_" -ForegroundColor Red
+                    throw
+                }
+                else {
+                    Write-Host "    ⚠ Failed to download $($req.Name)" -ForegroundColor Yellow
+                }
+            }
+        }
+    }
+}
+
 function Get-InstallPyPath {
-    # Returns the expected path to install.py
     return Join-Path $INSTALL_DIR "scripts" "install.py"
 }
 
@@ -95,13 +137,17 @@ function Install-FromLocal {
     
     $installPy = Get-InstallPyPath
     
+    # Ensure requirements exist before running
+    $reqDir = Join-Path $INSTALL_DIR "requirements"
+    Ensure-Requirements -ReqDir $reqDir
+    
     # Build arguments
     $installArgs = @()
     if ($Auto) { $installArgs += "--auto" }
     if ($Update) { $installArgs += "--update" }
     if ($Reconfigure) { $installArgs += "--reconfigure" }
     
-    Write-Host "    Running installer from: $installPy" -ForegroundColor DarkGray
+    Write-Host "    Running installer..." -ForegroundColor DarkGray
     Write-Host ""
     
     & $PythonPath $installPy @installArgs
@@ -112,39 +158,19 @@ function Install-FromRemote {
         [string]$PythonPath
     )
     
-    Write-Host "    Downloading and running installer directly..." -ForegroundColor DarkGray
+    Write-Host "    Running installer from remote..." -ForegroundColor DarkGray
     Write-Host ""
     
-    # Ensure requirements directory exists and download requirements files
+    # Ensure requirements exist (download them)
     $reqDir = Join-Path $INSTALL_DIR "requirements"
-    if (-not (Test-Path $reqDir)) {
-        Write-Host "    Creating requirements directory..." -ForegroundColor DarkGray
-        New-Item -ItemType Directory -Path $reqDir -Force | Out-Null
-    }
+    Ensure-Requirements -ReqDir $reqDir
     
-    # Download requirements files
-    $reqFiles = @("requirements.txt", "requirements-base.txt")
-    foreach ($reqFile in $reqFiles) {
-        $reqUrl = "$RAW_URL/requirements/$reqFile"
-        $reqPath = Join-Path $reqDir $reqFile
-        if (-not (Test-Path $reqPath)) {
-            Write-Host "    Downloading $reqFile..." -ForegroundColor DarkGray
-            try {
-                Invoke-WebRequest -Uri $reqUrl -OutFile $reqPath -UseBasicParsing
-            }
-            catch {
-                Write-Host "    ⚠ Failed to download $reqFile" -ForegroundColor Yellow
-            }
-        }
-    }
-    
-    # Download and execute install.py directly
+    # Download install.py to temp location
     $installPyUrl = "$RAW_URL/scripts/install.py"
+    $tempFile = [System.IO.Path]::GetTempFileName() + ".py"
     
     try {
-        # Use Invoke-WebRequest to download to temp file and execute
-        $tempFile = [System.IO.Path]::GetTempFileName() + ".py"
-        Invoke-WebRequest -Uri $installPyUrl -OutFile $tempFile -UseBasicParsing
+        Invoke-WebRequest -Uri $installPyUrl -OutFile $tempFile -UseBasicParsing -ErrorAction Stop
         
         $installArgs = @()
         if ($Auto) { $installArgs += "--auto" }
@@ -152,13 +178,9 @@ function Install-FromRemote {
         if ($Reconfigure) { $installArgs += "--reconfigure" }
         
         & $PythonPath $tempFile @installArgs
-        
-        # Cleanup
-        Remove-Item $tempFile -ErrorAction SilentlyContinue
     }
-    catch {
-        Write-Host "    ✗ Failed to download/run remote installer: $_" -ForegroundColor Red
-        throw
+    finally {
+        Remove-Item $tempFile -ErrorAction SilentlyContinue
     }
 }
 
@@ -168,13 +190,13 @@ function Install-ShiftLang {
     )
     
     # Clone or update repository first
-    $repoUpdated = $false
-    if (Test-Path $INSTALL_DIR) {
+    $repoExists = Test-Path $INSTALL_DIR
+    
+    if ($repoExists) {
         Write-Host "    Updating repository..." -ForegroundColor DarkGray
         Set-Location $INSTALL_DIR
         try {
             $pullOutput = git pull origin main 2>&1
-            $repoUpdated = $true
             if ($pullOutput -match "Already up to date") {
                 Write-Host "    ✓ Repository is up to date" -ForegroundColor Green
             }
@@ -190,7 +212,6 @@ function Install-ShiftLang {
         Write-Host "    Cloning repository..." -ForegroundColor DarkGray
         try {
             $null = git clone -q $REPO_URL $INSTALL_DIR 2>&1
-            $repoUpdated = $true
             Write-Host "    ✓ Repository cloned" -ForegroundColor Green
         }
         catch {
@@ -233,12 +254,5 @@ $null = Test-Git
 Write-Host "    ✓ Python found" -ForegroundColor Green
 Write-Host "    ✓ Git found" -ForegroundColor Green
 Write-Host ""
-
-# Check if we're being run from web (no local context)
-if ($MyInvocation.MyCommand.Path -eq $null) {
-    # Running from web (irm | iex)
-    Write-Host "    Detected remote execution mode" -ForegroundColor DarkGray
-    Write-Host ""
-}
 
 Install-ShiftLang -PythonPath $pythonPath
