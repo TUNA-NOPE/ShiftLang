@@ -3,12 +3,15 @@
 
 import os
 import sys
-import json
 import subprocess
 import threading
 import time
 import fcntl
 from pathlib import Path
+
+# ──────────────────────── Import Shared Modules ─────────────
+from shiftlang import load_config, detect_is_source_language, create_translators
+from shiftlang.config import CONFIG_PATH
 
 # Thread lock to prevent race conditions when multiple input devices detect the same hotkey
 _hotkey_lock = threading.Lock()
@@ -18,6 +21,7 @@ OS_NAME = "Linux"
 # ──────────────────────── Single Instance Lock ─────────────
 _LOCK_FILE = "/tmp/shiftlang_wayland.lock"
 _lock_fd = None
+
 
 def _ensure_single_instance():
     """Ensure only one instance of ShiftLang is running."""
@@ -33,37 +37,8 @@ def _ensure_single_instance():
         print("Only one instance can run at a time.")
         return False
 
+
 # ──────────────────────── Config ───────────────────────────
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-
-_DEFAULT_HOTKEYS = {
-    "Windows": "ctrl+shift+q",
-    "Darwin": "cmd+shift+g",
-    "Linux": "alt+shift+g",
-}
-
-
-def load_config():
-    """Load user preferences from config.json, with sensible defaults."""
-    defaults = {
-        "hotkey": _DEFAULT_HOTKEYS.get(OS_NAME, "ctrl+shift+q"),
-        "auto_start": False,
-        "source_language": "hebrew",
-        "target_language": "english",
-        "translation_provider": "google",  # "google" or "openrouter"
-        "openrouter_api_key": "",  # Optional API key for OpenRouter
-        "clear_clipboard_after_paste": True,  # Clear clipboard after pasting to prevent history spam
-    }
-    if os.path.exists(CONFIG_PATH):
-        try:
-            with open(CONFIG_PATH, "r") as f:
-                cfg = json.load(f)
-            defaults.update(cfg)
-        except Exception as e:
-            print(f"Config load error: {e}")
-    return defaults
-
-
 config = load_config()
 print(f"DEBUG: Loaded config: {config}")
 print(f"DEBUG: Hotkey to register: {config['hotkey']}")
@@ -78,87 +53,7 @@ except ImportError as e:
     sys.exit(1)
 
 # ──────────────────────── Translators (cached) ─────────────
-def _create_translators():
-    """Create translator instances based on configured provider."""
-    provider = config.get("translation_provider", "google").lower()
-
-    if provider == "openrouter":
-        api_key = config.get("openrouter_api_key", "")
-        model = config.get("openrouter_model", "openrouter/free")
-        forward = OpenRouterTranslator(
-            source=config["source_language"],
-            target=config["target_language"],
-            api_key=api_key,
-            model=model
-        )
-        reverse = OpenRouterTranslator(
-            source=config["target_language"],
-            target=config["source_language"],
-            api_key=api_key,
-            model=model
-        )
-        print(f"Using OpenRouter AI translator (model: {model})")
-    else:  # default to google
-        forward = GoogleTranslator(
-            source=config["source_language"],
-            target=config["target_language"],
-        )
-        reverse = GoogleTranslator(
-            source=config["target_language"],
-            target=config["source_language"],
-        )
-        print(f"Using Google Translator")
-
-    return forward, reverse
-
-_translator_forward, _translator_reverse = _create_translators()
-
-# ──────────────────────── Language Detection Helper ────────
-_LANGUAGE_UNICODE_RANGES = {
-    "hebrew": [("\u0590", "\u05ff")],
-    "arabic": [("\u0600", "\u06ff"), ("\u0750", "\u077f")],
-    "persian": [("\u0600", "\u06ff"), ("\u0750", "\u077f")],
-    "urdu": [("\u0600", "\u06ff"), ("\u0750", "\u077f")],
-    "hindi": [("\u0900", "\u097f")],
-    "bengali": [("\u0980", "\u09ff")],
-    "thai": [("\u0e00", "\u0e7f")],
-    "korean": [("\uac00", "\ud7af"), ("\u1100", "\u11ff")],
-    "japanese": [("\u3040", "\u309f"), ("\u30a0", "\u30ff"), ("\u4e00", "\u9fff")],
-    "chinese (simplified)": [("\u4e00", "\u9fff"), ("\u3400", "\u4dbf")],
-    "chinese (traditional)": [("\u4e00", "\u9fff"), ("\u3400", "\u4dbf")],
-    "russian": [("\u0400", "\u04ff")],
-    "ukrainian": [("\u0400", "\u04ff")],
-    "bulgarian": [("\u0400", "\u04ff")],
-    "serbian": [("\u0400", "\u04ff")],
-    "greek": [("\u0370", "\u03ff")],
-    "georgian": [("\u10a0", "\u10ff")],
-    "armenian": [("\u0530", "\u058f")],
-    "tamil": [("\u0b80", "\u0bff")],
-    "telugu": [("\u0c00", "\u0c7f")],
-    "kannada": [("\u0c80", "\u0cff")],
-    "malayalam": [("\u0d00", "\u0d7f")],
-    "gujarati": [("\u0a80", "\u0aff")],
-    "punjabi": [("\u0a00", "\u0a7f")],
-}
-
-
-def _detect_is_source_language(text):
-    """
-    Check if text is written in the source language's script.
-    Returns True if source language script is detected, False otherwise.
-    If the source language has no known script range, we always
-    translate source→target (returns None for auto-detect).
-    """
-    src = config["source_language"].lower()
-    ranges = _LANGUAGE_UNICODE_RANGES.get(src)
-    if not ranges:
-        return None  # signals "unknown, use auto-detect"
-
-    for ch in text:
-        for lo, hi in ranges:
-            if lo <= ch <= hi:
-                return True
-    return False
+_translator_forward, _translator_reverse, _provider = create_translators(config)
 
 
 # ──────────────────────── Clipboard ────────────────────────
@@ -232,10 +127,9 @@ def translate():
 
     # Detect direction & translate
     try:
-        provider = config.get("translation_provider", "google").lower()
-        is_source = _detect_is_source_language(text)
+        is_source = detect_is_source_language(text, config["source_language"])
 
-        if provider == "openrouter":
+        if _provider == "openrouter":
             # OpenRouter: Use bidirectional translation with smart language detection
             translated = _translator_forward.translate_bidirectional(text, is_source)
             # If OpenRouter failed (returned original text), fall back to Google
