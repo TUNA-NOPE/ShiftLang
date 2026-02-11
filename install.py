@@ -301,14 +301,27 @@ def install_dependencies():
 # ──────────────────────── Fetch Supported Languages ────────
 def get_supported_languages():
     """Fetch the supported languages from GoogleTranslator as a dict."""
-    try:
-        from deep_translator import GoogleTranslator
-
-        langs_dict = GoogleTranslator().get_supported_languages(as_dict=True)
-        return langs_dict
-    except Exception as e:
-        print(red(f"  Failed to fetch supported languages: {e}"))
-        return {
+    # Try to use venv Python if available to import deep_translator
+    if os.path.exists(VENV_PYTHON):
+        try:
+            result = subprocess.run(
+                [VENV_PYTHON, "-c", 
+                 "from deep_translator import GoogleTranslator; "
+                 "import json; "
+                 "langs = GoogleTranslator().get_supported_languages(as_dict=True); "
+                 "print(json.dumps(langs))"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                import json
+                return json.loads(result.stdout.strip())
+        except Exception:
+            pass  # Fall through to fallback list
+    
+    # Fallback: return hardcoded list
+    return {
             "afrikaans": "af",
             "albanian": "sq",
             "amharic": "am",
