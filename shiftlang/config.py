@@ -13,7 +13,8 @@ DEFAULT_HOTKEYS = {
     "Linux": "alt+shift+g",
 }
 
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+CONFIG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config")
+CONFIG_PATH = os.path.join(CONFIG_DIR, "config.json")
 
 # Available translation providers
 FREE_PROVIDERS = [
@@ -82,6 +83,7 @@ def save_config(
         "openrouter_api_key": api_key,
         "openrouter_model": model,
     }
+    os.makedirs(CONFIG_DIR, exist_ok=True)
     with open(CONFIG_PATH, "w") as f:
         json.dump(cfg, f, indent=2)
     return True
