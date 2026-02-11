@@ -972,44 +972,44 @@ def ask_provider_with_back(allow_back=True):
     Returns:
         (provider_id, is_openrouter, went_back) tuple
     """
-    # First, choose category
+    # Build a flat list of all options with separators
+    all_options = []
+    option_map = {}  # Maps index to (provider_id, is_openrouter)
+    
+    # Add section header for free providers
+    all_options.append("━━━ Free Providers (no API key needed) ━━━")
+    
+    # Add free providers
+    for provider_id, display_name in FREE_PROVIDERS:
+        idx = len(all_options)
+        all_options.append(f"  {display_name}")
+        option_map[idx] = (provider_id, False)
+    
+    # Add section header for OpenRouter
+    all_options.append("")
+    all_options.append("━━━ AI-Powered Translation ━━━")
+    idx = len(all_options)
+    all_options.append("  OpenRouter AI — free tier available, optional API key for higher limits")
+    option_map[idx] = ("openrouter", True)
+    
     clear_screen()
-    category_choice, went_back, _ = ask_choice_with_back(
-        "Choose translation provider category",
-        [
-            "Free Providers (no API key required)",
-            "AI-Powered (OpenRouter - free tier available)",
-        ],
-        note="All providers support 130+ languages",
+    provider_choice, went_back, _ = ask_choice_with_back(
+        "Choose translation provider",
+        all_options,
+        note="↑↓ to navigate, Enter to select",
         allow_back=allow_back,
     )
     
-    if went_back or category_choice is None:
+    if went_back or provider_choice is None:
         return None, False, went_back
     
-    if category_choice == 0:
-        # Free providers selection
-        provider_options = [name for _, name in FREE_PROVIDERS]
-        
-        clear_screen()
-        provider_choice, went_back, _ = ask_choice_with_back(
-            "Choose a free translation provider",
-            provider_options,
-            note="All are free and require no signup",
-            allow_back=True,
-        )
-        
-        if went_back:
-            return None, False, True
-        if provider_choice is None:
-            return None, False, False
-        
-        provider_id = FREE_PROVIDERS[provider_choice][0]
-        return provider_id, False, False
+    # Check if user selected a section header (not clickable)
+    if provider_choice not in option_map:
+        # They selected a header or empty line, treat as no selection
+        return None, False, False
     
-    else:
-        # OpenRouter
-        return "openrouter", True, False
+    provider_id, is_openrouter = option_map[provider_choice]
+    return provider_id, is_openrouter, False
 
 
 def run_interactive_setup(args=None):
@@ -1137,9 +1137,8 @@ def run_interactive_setup(args=None):
                 continue
             
             if provider is None:
-                print(dim("    Cancelled"))
-                print()
-                sys.exit(0)
+                # User selected a header/empty line or cancelled - re-show menu
+                continue
             
             if is_openrouter:
                 # OpenRouter model selection loop (allows going back)
