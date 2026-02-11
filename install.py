@@ -733,7 +733,7 @@ def _read_key():
 
 
 def ask_language(prompt, languages, default=None):
-    """Interactive language selector with arrow keys and live search. Returns list of languages or None if ESC pressed."""
+    """Interactive language selector with arrow keys and live search. Returns list of languages, 'BACK', or None if ESC pressed."""
     VIEWPORT_SIZE = 15
     all_languages = list(languages)
     items = list(all_languages)
@@ -800,7 +800,7 @@ def ask_language(prompt, languages, default=None):
         print()
         print(
             dim(
-                "    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit"
+                "    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit • type 'back' to return"
             )
         )
         sys.stdout.flush()
@@ -845,7 +845,10 @@ def ask_language(prompt, languages, default=None):
                 scroll_top = 0
                 draw_full()
         elif isinstance(key, str) and len(key) == 1 and key.isprintable():
+            # Check for 'back' typed in search
             new_query = search_query + key
+            if new_query.lower() == "back":
+                return "BACK"
             filtered = [l for l in all_languages if new_query.lower() in l.lower()]
             if filtered:
                 search_query = new_query
@@ -855,9 +858,125 @@ def ask_language(prompt, languages, default=None):
             draw_full()
 
 
+# ──────────────────────── Back Navigation Support ──────────
+def ask_choice_with_back(question, options, note=None, allow_back=True, show_arrows=True):
+    """Arrow-key choice selector with left/right navigation. Returns (index, went_back, went_forward)."""
+    cursor = 0
+
+    def draw_choice():
+        clear_screen()
+        print()
+        print("  " + bold(question))
+        print()
+        if note:
+            print(dim(f"    {note}"))
+            print()
+        for i, opt in enumerate(options):
+            if i == cursor:
+                print(f"  {cyan('›')} {opt}")
+            else:
+                print(f"    {dim(opt)}")
+        print()
+        if show_arrows:
+            if allow_back:
+                print(dim("    ↑↓ select • ← back • →/enter confirm"))
+            else:
+                print(dim("    ↑↓ select • →/enter confirm • esc exit"))
+        else:
+            if allow_back:
+                print(dim("    ↑↓ navigate • enter confirm • esc exit/back"))
+            else:
+                print(dim("    ↑↓ navigate • enter confirm • esc exit"))
+        sys.stdout.flush()
+
+    draw_choice()
+
+    while True:
+        key = _read_key()
+        if key == "UP" and cursor > 0:
+            cursor -= 1
+            draw_choice()
+        elif key == "DOWN" and cursor < len(options) - 1:
+            cursor += 1
+            draw_choice()
+        elif key == "LEFT":
+            if allow_back:
+                print()
+                return None, True, False
+        elif key == "RIGHT" or key == "ENTER":
+            print()
+            return cursor, False, key == "RIGHT"
+        elif key == "ESC":
+            print()
+            return None, False, False
+
+
+def ask_input_with_back(prompt, default=None, allow_back=True):
+    """Text input with back option via left arrow or typing 'back'. Returns (value, went_back)."""
+    suffix = f" {dim(f'({default})')}" if default else ""
+    full_prompt = f"    {prompt}{suffix}: "
+    print()
+    if allow_back:
+        print(dim("    (type 'back' or press ← to return to previous step)"))
+    val = tty_input(full_prompt).strip()
+    if allow_back and val.lower() == "back":
+        return None, True
+    return val if val else default, False
+
+
 def run_interactive_setup(args=None):
-    """Run the interactive preferences questionnaire."""
+    """Run the interactive preferences questionnaire with back navigation."""
+    # State definitions
+    STEP_WAYLAND = "wayland"
+    STEP_LANGUAGE = "language"
+    STEP_PROVIDER = "provider"
+    STEP_OPENROUTER_MODEL = "openrouter_model"
+    STEP_OPENROUTER_API_KEY = "openrouter_api_key"
+    STEP_AUTOSTART = "autostart"
+    STEP_HOTKEY = "hotkey"
+    STEP_SUMMARY = "summary"
+    
+    # Ordered steps for navigation
+    ALL_STEPS = [STEP_WAYLAND, STEP_LANGUAGE, STEP_PROVIDER, STEP_AUTOSTART, STEP_HOTKEY]
+    
+    # State
+    step_index = 0
+    languages = None
+    chosen_langs = None
+    source_lang = None
+    target_lang = None
+    provider = None
+    model = None
+    api_key = None
+    auto_start = None
+    hotkey = None
+    default_hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
+    
+    # Model maps
+    model_map = {
+        0: "openrouter/free",
+        1: "google/gemini-2.0-flash-exp:free",
+        2: "meta-llama/llama-3.1-8b-instruct:free",
+        3: "nvidia/nemotron-3-nano-30b-a3b:free",
+        4: "arcee-ai/trinity-mini:free",
+        5: "google/gemini-flash-1.5",
+        6: "openai/gpt-4o-mini",
+        7: "meta-llama/llama-3.3-70b-instruct",
+    }
+    free_model_map = {
+        0: "openrouter/free",
+        1: "google/gemini-2.0-flash-exp:free",
+        2: "meta-llama/llama-3.1-8b-instruct:free",
+        3: "nvidia/nemotron-3-nano-30b-a3b:free",
+        4: "arcee-ai/trinity-mini:free",
+    }
+    
     # Welcome screen - wait for user to press Enter
+    clear_screen()
+    print()
+    print(cyan("  ›") + " " + bold("Setup"))
+    print()
+    print()
     print(dim("    Press Enter to begin setup..."))
     print()
     # Skip waiting in non-interactive mode (piped input or --auto)
@@ -865,223 +984,291 @@ def run_interactive_setup(args=None):
         tty_input("")
     except (EOFError, OSError):
         pass  # Non-interactive, skip waiting
-
-    clear_screen()
-    print()
-    print(cyan("  ›") + " " + bold("Setup"))
-    print()
-    print()
-
-    # Check input group for Wayland
-    if IS_WAYLAND and not check_input_group():
-        print(yellow("    ⚠ Wayland requires input group membership"))
-        print()
-        choice = ask_choice(
-            "Add your user to input group?",
-            [
-                "Yes (requires sudo)",
-                "No, I'll do it manually",
-            ],
-        )
-        if choice is None:
-            print(dim("    Cancelled"))
-            print()
-            sys.exit(0)
-        if choice == 0:
-            add_user_to_input_group()
-        print()
-
+    
+    # Load languages once
     print(dim("    Loading languages..."))
     languages = get_supported_languages()
     print(green("    ✓") + f" {len(languages)} languages available")
-    print()
+    time.sleep(0.5)
 
-    chosen_langs = ask_language("Select 2 languages", list(languages.keys()))
-    if chosen_langs is None:
-        print(dim("    Cancelled"))
-        print()
-        sys.exit(0)
-    source_lang = languages[chosen_langs[0]]
-    target_lang = languages[chosen_langs[1]]
-
-    # Ask about translation provider
-    provider_choice = ask_choice(
-        "Choose translation provider",
-        [
-            "Google Translate (Fast, free, no setup)",
-            "OpenRouter AI (More accurate, requires internet)",
-        ],
-        note="Google Translate is recommended for most users",
-    )
-    if provider_choice is None:
-        print(dim("    Cancelled"))
-        print()
-        sys.exit(0)
-
-    if provider_choice == 0:
-        provider = "google"
-        api_key = ""
-        model = ""
-    else:
-        provider = "openrouter"
-
-        # Ask for model selection first
-        print()
-        model_choice = ask_choice(
-            "Choose OpenRouter model",
-            [
-                "Free Auto-Router (automatic model selection)",
-                "Gemini 2.0 Flash Exp (free, very fast, experimental)",
-                "Llama 3.1 8B (free, fast, good for translation)",
-                "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
-                "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
-                "Gemini Flash 1.5 (paid, $0.075/$0.30 per M tokens, ~2.3s)",
-                "GPT-4o Mini (paid, excellent translation quality)",
-                "Llama 3.3 70B (paid, efficient, high quality)",
-            ],
-            note="Free models don't require payment, paid models need API credits",
-        )
-        if model_choice is None:
-            print(dim("    Cancelled"))
-            print()
-            sys.exit(0)
-
-        # Map choice to model ID
-        model_map = {
-            0: "openrouter/free",
-            1: "google/gemini-2.0-flash-exp:free",
-            2: "meta-llama/llama-3.1-8b-instruct:free",
-            3: "nvidia/nemotron-3-nano-30b-a3b:free",
-            4: "arcee-ai/trinity-mini:free",
-            5: "google/gemini-flash-1.5",
-            6: "openai/gpt-4o-mini",
-            7: "meta-llama/llama-3.3-70b-instruct",
-        }
-        model = model_map[model_choice]
-
-        # Determine if API key is required
-        is_free_model = model_choice in [0, 1, 2, 3, 4]
-
-        print()
-        if is_free_model:
-            print(green("    ✓") + " Free model selected - no API key required")
-            print(
-                dim("    (You can optionally add an API key for rate limit increases)")
+    while step_index < len(ALL_STEPS):
+        current_step = ALL_STEPS[step_index]
+        went_back = False
+        
+        # ──────────────────────── WAYLAND CHECK ────────────────────────
+        if current_step == STEP_WAYLAND:
+            if IS_WAYLAND and not check_input_group():
+                clear_screen()
+                print()
+                print(yellow("    ⚠ Wayland requires input group membership"))
+                print()
+                choice, went_back, _ = ask_choice_with_back(
+                    "Add your user to input group?",
+                    [
+                        "Yes (requires sudo)",
+                        "No, I'll do it manually",
+                    ],
+                    allow_back=False,  # First step, can't go back
+                )
+                if choice is None:
+                    print(dim("    Cancelled"))
+                    print()
+                    sys.exit(0)
+                if choice == 0:
+                    add_user_to_input_group()
+                print()
+            # Always advance from wayland step
+            step_index += 1
+            continue
+        
+        # ──────────────────────── LANGUAGE SELECTION ────────────────────────
+        elif current_step == STEP_LANGUAGE:
+            clear_screen()
+            chosen_langs = ask_language("Select 2 languages", list(languages.keys()))
+            if chosen_langs is None:
+                print(dim("    Cancelled"))
+                print()
+                sys.exit(0)
+            if chosen_langs == "BACK":
+                went_back = True
+            else:
+                source_lang = languages[chosen_langs[0]]
+                target_lang = languages[chosen_langs[1]]
+            
+            if went_back:
+                step_index = max(0, step_index - 1)
+            else:
+                step_index += 1
+            continue
+        
+        # ──────────────────────── TRANSLATION PROVIDER ────────────────────────
+        elif current_step == STEP_PROVIDER:
+            clear_screen()
+            provider_choice, went_back, _ = ask_choice_with_back(
+                "Choose translation provider",
+                [
+                    "Google Translate (Fast, free, no setup)",
+                    "OpenRouter AI (More accurate, requires internet)",
+                ],
+                note="Google Translate is recommended for most users",
+                allow_back=step_index > 0,
             )
-            print()
-            api_key = ask_input("OpenRouter API key (optional)", default="").strip()
-        else:
-            print(yellow("    ⚠ This model requires an API key with credits"))
-            print()
-            print(dim("    Get a free API key at:"))
-            print(cyan("    https://openrouter.ai/keys"))
-            print()
-            print(dim("    Note: You'll need to add credits ($5 minimum)"))
-            print()
-
-            api_key = ""
-            while not api_key:
-                api_key = ask_input("OpenRouter API key (required)", default="").strip()
-                if not api_key:
-                    print()
-                    choice = ask_choice(
-                        "API key is required for paid models",
+            if provider_choice is None and not went_back:
+                print(dim("    Cancelled"))
+                print()
+                sys.exit(0)
+            
+            if went_back:
+                step_index = max(0, step_index - 1)
+                continue
+            
+            if provider_choice == 0:
+                provider = "google"
+                api_key = ""
+                model = ""
+            else:
+                provider = "openrouter"
+                
+                # OpenRouter model selection loop (allows going back)
+                model_step_active = True
+                while model_step_active:
+                    clear_screen()
+                    model_choice, went_back, _ = ask_choice_with_back(
+                        "Choose OpenRouter model",
                         [
-                            "Enter API key now",
-                            "Switch to Google Translate instead",
-                            "Choose a free OpenRouter model",
+                            "Free Auto-Router (automatic model selection)",
+                            "Gemini 2.0 Flash Exp (free, very fast, experimental)",
+                            "Llama 3.1 8B (free, fast, good for translation)",
+                            "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
+                            "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
+                            "Gemini Flash 1.5 (paid, $0.075/$0.30 per M tokens, ~2.3s)",
+                            "GPT-4o Mini (paid, excellent translation quality)",
+                            "Llama 3.3 70B (paid, efficient, high quality)",
                         ],
+                        note="Free models don't require payment, paid models need API credits",
+                        allow_back=True,
                     )
-                    if choice == 1:
-                        # Switch to Google
-                        provider = "google"
-                        api_key = ""
-                        model = ""
-                        print()
+                    if went_back:
+                        # Go back to provider selection
+                        model_step_active = False
+                        step_index = max(0, step_index - 1)
                         break
-                    elif choice == 2:
-                        # Go back to model selection with free models
+                    if model_choice is None:
+                        print(dim("    Cancelled"))
                         print()
-                        free_model_choice = ask_choice(
-                            "Choose a free OpenRouter model",
-                            [
-                                "Free Auto-Router (automatic model selection)",
-                                "Gemini 2.0 Flash Exp (free, very fast, experimental)",
-                                "Llama 3.1 8B (free, fast, good for translation)",
-                                "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
-                                "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
-                            ],
-                        )
-                        if free_model_choice is None:
-                            print(dim("    Cancelled"))
+                        sys.exit(0)
+                    
+                    model = model_map[model_choice]
+                    is_free_model = model_choice in [0, 1, 2, 3, 4]
+                    
+                    # API Key step
+                    api_step_active = True
+                    while api_step_active:
+                        clear_screen()
+                        if is_free_model:
+                            print(green("    ✓") + " Free model selected - no API key required")
+                            print(dim("    (You can optionally add an API key for rate limit increases)"))
                             print()
-                            sys.exit(0)
+                            api_key, went_back = ask_input_with_back("OpenRouter API key (optional)", default="")
+                            api_key = (api_key or "").strip()
+                            if went_back:
+                                # Go back to model selection
+                                api_step_active = False
+                                break
+                        else:
+                            print(yellow("    ⚠ This model requires an API key with credits"))
+                            print()
+                            print(dim("    Get a free API key at:"))
+                            print(cyan("    https://openrouter.ai/keys"))
+                            print()
+                            print(dim("    Note: You'll need to add credits ($5 minimum)"))
+                            print()
+                            
+                            api_key, went_back = ask_input_with_back("OpenRouter API key (required)", default="")
+                            api_key = (api_key or "").strip()
+                            if went_back:
+                                # Go back to model selection
+                                api_step_active = False
+                                break
+                            
+                            if not api_key:
+                                # Show options when no API key entered
+                                choice, went_back, _ = ask_choice_with_back(
+                                    "API key is required for paid models",
+                                    [
+                                        "Enter API key now",
+                                        "Switch to Google Translate instead",
+                                        "Choose a free OpenRouter model",
+                                    ],
+                                    allow_back=True,
+                                )
+                                if went_back:
+                                    # Go back to model selection
+                                    api_step_active = False
+                                    break
+                                if choice == 1:
+                                    # Switch to Google
+                                    provider = "google"
+                                    api_key = ""
+                                    model = ""
+                                    api_step_active = False
+                                    model_step_active = False
+                                    break
+                                elif choice == 2:
+                                    # Choose free model
+                                    clear_screen()
+                                    free_model_choice, went_back, _ = ask_choice_with_back(
+                                        "Choose a free OpenRouter model",
+                                        [
+                                            "Free Auto-Router (automatic model selection)",
+                                            "Gemini 2.0 Flash Exp (free, very fast, experimental)",
+                                            "Llama 3.1 8B (free, fast, good for translation)",
+                                            "NVIDIA Nemotron 3 Nano (free, 30B/3.5B active, 1M context)",
+                                            "Arcee Trinity Mini (free, 26B/3B active, multi-turn)",
+                                        ],
+                                        allow_back=True,
+                                    )
+                                    if went_back:
+                                        # Stay in API key step, but let user try again
+                                        continue
+                                    if free_model_choice is None:
+                                        print(dim("    Cancelled"))
+                                        print()
+                                        sys.exit(0)
+                                    model = free_model_map[free_model_choice]
+                                    print()
+                                    print(green("    ✓") + " Free model selected - no API key required")
+                                    api_key = ""
+                                    api_step_active = False
+                                    model_step_active = False
+                                    break
+                                # choice == 0 means continue to enter API key
+                                continue
+                        
+                        # API key entered successfully
+                        api_step_active = False
+                        model_step_active = False
+                    
+                    if went_back and api_step_active == False and model_step_active == False:
+                        # We came from API step and went back to model selection
+                        continue
+                
+                if went_back and step_index != ALL_STEPS.index(STEP_PROVIDER):
+                    # We went back further than model selection
+                    continue
+            
+            if not went_back:
+                step_index += 1
+            continue
+        
+        # ──────────────────────── AUTOSTART ────────────────────────
+        elif current_step == STEP_AUTOSTART:
+            clear_screen()
+            auto_start_choice, went_back, _ = ask_choice_with_back(
+                "Start automatically on boot?",
+                [
+                    "Yes",
+                    "No, I'll start manually",
+                ],
+                allow_back=step_index > 0,
+            )
+            if auto_start_choice is None and not went_back:
+                print(dim("    Cancelled"))
+                print()
+                sys.exit(0)
+            
+            if went_back:
+                step_index = max(0, step_index - 1)
+                # If coming back from provider was openrouter, we need to skip the nested steps
+                continue
+            
+            auto_start = auto_start_choice == 0
+            step_index += 1
+            continue
+        
+        # ──────────────────────── HOTKEY ────────────────────────
+        elif current_step == STEP_HOTKEY:
+            clear_screen()
+            if OS_NAME == "Darwin":
+                default_label = f"Default (Cmd+Shift+G)"
+            else:
+                default_label = f"Default (Ctrl+Shift+Q)"
 
-                        free_model_map = {
-                            0: "openrouter/free",
-                            1: "google/gemini-2.0-flash-exp:free",
-                            2: "meta-llama/llama-3.1-8b-instruct:free",
-                            3: "nvidia/nemotron-3-nano-30b-a3b:free",
-                            4: "arcee-ai/trinity-mini:free",
-                        }
-                        model = free_model_map[free_model_choice]
-                        print()
-                        print(
-                            green("    ✓")
-                            + " Free model selected - no API key required"
-                        )
-                        api_key = ""
-                        break
-                    print()
-
-        if provider == "openrouter" and api_key:
-            print(green("    ✓") + " API key configured")
-        print()
-
-    default_hotkey = DEFAULTS.get(OS_NAME, "ctrl+shift+q")
-
-    auto_start_choice = ask_choice(
-        "Start automatically on boot?",
-        [
-            "Yes",
-            "No, I'll start manually",
-        ],
-    )
-    if auto_start_choice is None:
-        print(dim("    Cancelled"))
-        print()
-        sys.exit(0)
-    auto_start = auto_start_choice == 0
-
-    if OS_NAME == "Darwin":
-        default_label = f"Default (Cmd+Shift+G)"
-    else:
-        default_label = f"Default (Ctrl+Shift+Q)"
-
-    hotkey_choice = ask_choice(
-        "Choose keyboard shortcut",
-        [
-            default_label,
-            "Custom shortcut",
-        ],
-    )
-    if hotkey_choice is None:
-        print(dim("    Cancelled"))
-        print()
-        sys.exit(0)
-
-    if hotkey_choice == 0:
-        hotkey = default_hotkey
-    else:
-        print()
-        print(dim("    Examples: ctrl+shift+t, alt+g, cmd+shift+k"))
-        print()
-        hotkey = ask_input("Enter hotkey", default=default_hotkey)
-        if not hotkey:
-            hotkey = default_hotkey
-    print()
+            hotkey_choice, went_back, _ = ask_choice_with_back(
+                "Choose keyboard shortcut",
+                [
+                    default_label,
+                    "Custom shortcut",
+                ],
+                allow_back=step_index > 0,
+            )
+            if hotkey_choice is None and not went_back:
+                print(dim("    Cancelled"))
+                print()
+                sys.exit(0)
+            
+            if went_back:
+                step_index = max(0, step_index - 1)
+                continue
+            
+            if hotkey_choice == 0:
+                hotkey = default_hotkey
+                step_index += 1
+            else:
+                # Custom hotkey input
+                print()
+                print(dim("    Examples: ctrl+shift+t, alt+g, cmd+shift+k"))
+                print()
+                custom_hotkey, went_back = ask_input_with_back("Enter hotkey", default=default_hotkey)
+                if went_back:
+                    # Stay on hotkey step to choose again
+                    continue
+                hotkey = custom_hotkey if custom_hotkey else default_hotkey
+                step_index += 1
+            continue
 
     # Apply settings
+    clear_screen()
     print()
     print(dim("  Saving configuration..."))
     print()
