@@ -60,12 +60,9 @@ class OpenRouterTranslator:
                 self.api_url, headers=headers, json=payload, timeout=30
             )
 
-            # Handle 401 Unauthorized specifically
+            # Handle 401 Unauthorized specifically - silent fail for auto-fallback
             if response.status_code == 401:
-                print("✗ OpenRouter authentication failed")
-                print("  API key is missing or invalid")
-                print("  Get your API key at: https://openrouter.ai/keys")
-                print("  Then run: python install.py --reconfigure")
+                print("OpenRouter: Authentication failed, will fallback to Google")
                 return text
 
             response.raise_for_status()
@@ -79,9 +76,7 @@ class OpenRouterTranslator:
             return translated
 
         except requests.exceptions.RequestException as e:
-            print(f"OpenRouter API error: {e}")
-            if "401" in str(e):
-                print("  Hint: Check your API key in config.json")
+            print(f"OpenRouter API error, will fallback to Google: {e}")
             # Fallback to original text if translation fails
             return text
         except (KeyError, IndexError) as e:
@@ -140,10 +135,7 @@ Text to translate:
             )
 
             if response.status_code == 401:
-                print("✗ OpenRouter authentication failed")
-                print("  API key is missing or invalid")
-                print("  Get your API key at: https://openrouter.ai/keys")
-                print("  Then run: python install.py --reconfigure")
+                print("OpenRouter: Authentication failed, will fallback to Google")
                 return text
 
             response.raise_for_status()
@@ -172,9 +164,7 @@ Text to translate:
             return translated
 
         except requests.exceptions.RequestException as e:
-            print(f"OpenRouter API error: {e}")
-            if "401" in str(e):
-                print("  Hint: Check your API key in config.json")
+            print(f"OpenRouter API error, will fallback to Google: {e}")
             return text
         except (KeyError, IndexError) as e:
             print(f"OpenRouter response parsing error: {e}")

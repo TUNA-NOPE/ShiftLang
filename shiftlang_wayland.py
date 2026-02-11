@@ -238,6 +238,17 @@ def translate():
         if provider == "openrouter":
             # OpenRouter: Use bidirectional translation with smart language detection
             translated = _translator_forward.translate_bidirectional(text, is_source)
+            # If OpenRouter failed (returned original text), fall back to Google
+            if translated.strip().lower() == text.strip().lower():
+                print("OpenRouter failed, falling back to Google Translate...")
+                # Create Google translator for fallback
+                if is_source is None:
+                    fallback = GoogleTranslator(source="auto", target=config["target_language"])
+                elif is_source:
+                    fallback = GoogleTranslator(source=config["source_language"], target=config["target_language"])
+                else:
+                    fallback = GoogleTranslator(source=config["target_language"], target=config["source_language"])
+                translated = fallback.translate(text)
         else:
             # Google Translator: Use script-based detection
             if is_source is None:
