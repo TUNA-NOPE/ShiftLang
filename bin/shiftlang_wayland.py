@@ -283,7 +283,13 @@ class Listener:
             # Use lock to prevent race conditions between multiple input devices
             with _hotkey_lock:
                 now = time.time()
-                if now - self.last_trigger < 1.5 or self.busy:
+                # Increased cooldown to 2.0 seconds to prevent double-triggering
+                cooldown = 2.0
+                if now - self.last_trigger < cooldown:
+                    print(f"Hotkey debounced ({now - self.last_trigger:.2f}s < {cooldown}s)")
+                    return
+                if self.busy:
+                    print("Translation already in progress, ignoring hotkey")
                     return
                 self.last_trigger = now
                 self.busy = True
@@ -293,6 +299,8 @@ class Listener:
                 try:
                     translate()
                 finally:
+                    # Add a small delay before clearing busy to prevent immediate re-trigger
+                    time.sleep(0.5)
                     self.busy = False
 
             threading.Thread(target=run, daemon=True).start()

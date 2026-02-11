@@ -203,7 +203,7 @@ else:
 # ──────────────────────── Translation Logic ────────────────
 _is_translating = False
 _last_translation_time = 0
-_MIN_TRANSLATION_INTERVAL = 0.5  # Minimum seconds between translations
+_MIN_TRANSLATION_INTERVAL = 1.5  # Minimum seconds between translations (increased to prevent double-trigger)
 
 
 def _get_hotkey_modifier_keys():
@@ -218,11 +218,12 @@ def translate_text():
 
     # Debounce: prevent rapid re-triggering
     current_time = time.time()
-    if current_time - _last_translation_time < _MIN_TRANSLATION_INTERVAL:
-        print("Translation debounced - too soon since last translation")
+    if _is_translating:
+        print("Translation already in progress, ignoring hotkey")
         return
     
-    if _is_translating:
+    if current_time - _last_translation_time < _MIN_TRANSLATION_INTERVAL:
+        print(f"Translation debounced - too soon since last translation ({current_time - _last_translation_time:.2f}s < {_MIN_TRANSLATION_INTERVAL}s)")
         return
 
     _is_translating = True
