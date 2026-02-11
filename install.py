@@ -983,7 +983,6 @@ def run_interactive_setup(args=None):
     }
     
     # Welcome screen - wait for user to press Enter
-    clear_screen()
     print()
     print(cyan("  ›") + " " + bold("Setup"))
     print()
