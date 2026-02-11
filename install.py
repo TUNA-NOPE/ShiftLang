@@ -255,7 +255,7 @@ def create_virtualenv():
 # ──────────────────────── Install dependencies ─────────────
 def install_dependencies():
     # Use Linux-specific requirements if on Linux, otherwise use base requirements
-    req_file = "requirements-linux.txt" if OS_NAME == "Linux" else "requirements.txt"
+    req_file = "requirements/linux.txt" if OS_NAME == "Linux" else "requirements/requirements.txt"
     req = os.path.join(PROJECT_DIR, req_file)
     if not os.path.exists(req):
         print(red(f"    ✗ {req_file} not found"))
