@@ -40,6 +40,33 @@ DEFAULTS = {
 }
 
 
+# ──────────────────────── TTY Input Helper ─────────────────
+def get_tty():
+    """Get a file descriptor for the terminal, even when piped."""
+    if OS_NAME == "Windows":
+        return None
+    try:
+        return open("/dev/tty", "r")
+    except (OSError, IOError):
+        return None
+
+
+def tty_input(prompt=""):
+    """Read input from /dev/tty if available, otherwise stdin."""
+    tty = get_tty()
+    if tty:
+        try:
+            if prompt:
+                # Write prompt to stderr so it still appears
+                sys.stderr.write(prompt)
+                sys.stderr.flush()
+            return tty.readline().rstrip("\n")
+        finally:
+            tty.close()
+    else:
+        return input(prompt)
+
+
 # ──────────────────────── Helpers ──────────────────────────
 def clear_screen():
     os.system("cls" if OS_NAME == "Windows" else "clear")
@@ -612,14 +639,15 @@ def ask_choice(question, options, note=None):
 
 
 def ask_input(prompt, default=None):
-    """Simple text input with optional default."""
+    """Simple text input with optional default - reads from /dev/tty when piped."""
     suffix = f" {dim(f'({default})')}" if default else ""
-    val = input(f"    {prompt}{suffix}: ").strip()
+    full_prompt = f"    {prompt}{suffix}: "
+    val = tty_input(full_prompt).strip()
     return val if val else default
 
 
 def _read_key():
-    """Read a single keypress and return a normalized string."""
+    """Read a single keypress and return a normalized string - reads from /dev/tty when piped."""
     if OS_NAME == "Windows":
         import msvcrt
 
@@ -648,29 +676,31 @@ def _read_key():
     else:
         import tty
         import termios
-        import os
 
-        if not sys.stdin.isatty():
-            line = sys.stdin.readline()
-            if not line:
-                return "ENTER"
-            first_char = line[0]
-            if first_char == "\n" or first_char == "\r":
-                return "ENTER"
-            elif first_char == " ":
-                return "SPACE"
-            elif first_char == "\x7f" or first_char == "\x08":
-                return "BACKSPACE"
-            elif first_char == "\x1b":
-                return "ESC"
-            return first_char
-
+        # Always use /dev/tty for key input on Unix
         try:
             fd = os.open("/dev/tty", os.O_RDONLY)
             use_dev_tty = True
         except OSError:
+            # Fallback to stdin if /dev/tty not available
             fd = sys.stdin.fileno()
             use_dev_tty = False
+            if not sys.stdin.isatty():
+                # Last resort - try to read a line
+                line = tty_input("")
+                if not line:
+                    return "ENTER"
+                first_char = line[0]
+                if first_char == "\n" or first_char == "\r":
+                    return "ENTER"
+                elif first_char == " ":
+                    return "SPACE"
+                elif first_char == "\x7f" or first_char == "\x08":
+                    return "BACKSPACE"
+                elif first_char == "\x1b":
+                    return "ESC"
+                return first_char
+
         old = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
@@ -832,7 +862,7 @@ def run_interactive_setup(args=None):
     print()
     # Skip waiting in non-interactive mode (piped input or --auto)
     try:
-        input()
+        tty_input("")
     except (EOFError, OSError):
         pass  # Non-interactive, skip waiting
 
