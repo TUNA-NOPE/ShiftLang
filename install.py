@@ -727,9 +727,9 @@ def _read_key():
             else:
                 return ch
         finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
             if use_dev_tty:
                 os.close(fd)
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def ask_language(prompt, languages, default=None):
