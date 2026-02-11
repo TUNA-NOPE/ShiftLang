@@ -9,6 +9,9 @@ import threading
 import time
 from pathlib import Path
 
+# Thread lock to prevent race conditions when multiple input devices detect the same hotkey
+_hotkey_lock = threading.Lock()
+
 OS_NAME = "Linux"
 
 # ──────────────────────── Config ───────────────────────────
@@ -311,18 +314,32 @@ class Listener:
         print(f"DEBUG: Parsed hotkey codes: {self.hotkey_codes}")
 
     def find_devs(self):
-        """Find keyboard input devices."""
+        """Find keyboard input devices, filtering out non-keyboards and avoiding duplicates."""
         devs = []
-        for p in Path("/dev/input").glob("event*"):
+        seen_physical_paths = set()
+        
+        for p in sorted(Path("/dev/input").glob("event*")):
             try:
                 d = InputDevice(p)
                 caps = d.capabilities()
                 if ecodes.EV_KEY in caps:
                     keys = caps[ecodes.EV_KEY]
-                    # Check if it has typical keyboard keys
-                    if ecodes.KEY_A in keys and ecodes.KEY_SPACE in keys:
-                        devs.append(d)
-                        print(f"DEBUG: Found keyboard: {d.name}")
+                    # Strict keyboard check: must have A-Z keys and be a real keyboard
+                    has_alphabet = all(ecodes.KEY_A + i in keys for i in range(26))
+                    has_digits = ecodes.KEY_1 in keys and ecodes.KEY_0 in keys
+                    
+                    # Skip if it doesn't look like a full keyboard
+                    if not (has_alphabet and has_digits and ecodes.KEY_SPACE in keys):
+                        continue
+                    
+                    # Deduplicate by physical path (some keyboards appear as multiple event devices)
+                    phys = d.phys or str(p)
+                    if phys in seen_physical_paths:
+                        continue
+                    seen_physical_paths.add(phys)
+                    
+                    devs.append(d)
+                    print(f"DEBUG: Found keyboard: {d.name} ({p.name})")
             except (PermissionError, OSError):
                 pass
         return devs
@@ -339,12 +356,14 @@ class Listener:
 
         # Check hotkey
         if check_hotkey(self.pressed, self.hotkey_codes):
-            now = time.time()
-            if now - self.last_trigger < 1.5 or self.busy:
-                return
-            self.last_trigger = now
-            self.busy = True
-            self.pressed.clear()
+            # Use lock to prevent race conditions between multiple input devices
+            with _hotkey_lock:
+                now = time.time()
+                if now - self.last_trigger < 1.5 or self.busy:
+                    return
+                self.last_trigger = now
+                self.busy = True
+                self.pressed.clear()
 
             def run():
                 try:
