@@ -14,6 +14,7 @@ A lightweight background tool that instantly translates selected text between an
 - **One-command install** — single command to set up everything
 - **Virtual environment** — isolated Python dependencies (no system-wide installs)
 - **Reconfigurable** — change settings anytime without reinstalling
+- **Self-healing installer** — automatically downloads missing files if needed
 
 ## Requirements
 
@@ -69,6 +70,48 @@ The installer will automatically:
 1. Select any text in any application.
 2. Press your configured hotkey (default: **Ctrl+Shift+Q**).
 3. The selected text is replaced with its translation.
+
+## Troubleshooting
+
+### Windows: "requirements/requirements.txt not found"
+
+If you see this error during installation, the installer will automatically attempt to fix it. However, if it persists, try these solutions:
+
+**Solution 1: Delete and reinstall**
+```powershell
+# Remove existing installation
+Remove-Item -Recurse -Force "$env:USERPROFILE\ShiftLang"
+
+# Run installer again
+irm https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/scripts/install.ps1 | iex
+```
+
+**Solution 2: Manual install**
+```powershell
+# Clone manually
+git clone https://github.com/TUNA-NOPE/ShiftLang.git $env:USERPROFILE\ShiftLang
+cd $env:USERPROFILE\ShiftLang
+
+# Run installer
+python scripts/install.py
+```
+
+### General Issues
+
+**Installation fails or hangs:**
+- Ensure Python 3.8+ is installed and in your PATH
+- Ensure git is installed and accessible
+- Try running the manual install steps instead of the one-liner
+
+**Hotkey doesn't work:**
+- On Windows: Run as administrator if the hotkey doesn't register in elevated windows
+- Check that no other application is using the same hotkey
+- Reconfigure with `python scripts/install.py --reconfigure`
+
+**Translation fails:**
+- Check your internet connection
+- Try switching to a different translation provider in the config
+- Some providers may have rate limits
 
 ## Translation Providers
 
@@ -148,6 +191,11 @@ python3 scripts/install.py --reconfigure
 
 Short form: `python scripts/install.py -r`
 
+Or use the installer flags:
+- `--auto` / `-a` — Automatic/silent mode (uses defaults or existing config)
+- `--update` / `-u` — Update existing installation
+- `--reconfigure` / `-r` — Reconfigure settings
+
 ## Manual Run
 
 If you chose not to enable auto-start, run ShiftLang manually:
@@ -191,6 +239,7 @@ ShiftLang/
 │   └── apply_autostart.py   # Autostart utility
 ├── requirements/            # Dependencies
 │   ├── requirements.txt     # Python dependencies
+│   ├── requirements-base.txt # Base dependencies
 │   └── linux.txt            # Linux-specific dependencies
 ├── config/                  # Configuration
 │   ├── config.json          # User preferences (generated)
