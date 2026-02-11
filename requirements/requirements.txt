@@ -1,5 +1,1 @@
-keyboard
-pyperclip
-deep-translator
-translators
-requests
+-r requirements-base.txt
