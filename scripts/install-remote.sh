@@ -57,9 +57,18 @@ fi
 if [ -d "$INSTALL_DIR" ]; then
     echo "    Updating repository..."
     cd "$INSTALL_DIR"
-    # Stash any local changes and pull latest
-    git stash push -m "install-remote stash" --quiet 2>/dev/null || true
-    if git pull origin main 2>/dev/null; then
+    
+    # Check if there are local changes
+    if ! git diff --quiet HEAD 2>/dev/null || ! git diff --cached --quiet HEAD 2>/dev/null; then
+        echo "    ⚠ Local changes detected, stashing them..."
+        git stash push -m "install-remote auto-stash $(date +%s)" --quiet || true
+    fi
+    
+    # Reset any modified files to ensure clean state
+    git checkout -- . 2>/dev/null || true
+    
+    # Pull latest
+    if git pull origin main; then
         echo "    ✓ Updated to latest version"
     else
         echo "    ⚠ Update failed, attempting fresh clone..."
