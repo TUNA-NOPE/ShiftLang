@@ -42,6 +42,8 @@ class OpenRouterTranslator:
         # Make API request
         headers = {
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/TUNA-NOPE/ShiftLang",  # Required by OpenRouter
+            "X-Title": "ShiftLang Translator",
         }
 
         # Only add authorization if API key is provided
@@ -120,6 +122,8 @@ Text to translate:
         # Make API request
         headers = {
             "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/TUNA-NOPE/ShiftLang",  # Required by OpenRouter
+            "X-Title": "ShiftLang Translator",
         }
 
         if self.api_key:

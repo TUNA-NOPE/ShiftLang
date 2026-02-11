@@ -236,12 +236,8 @@ def translate():
         is_source = _detect_is_source_language(text)
 
         if provider == "openrouter":
-            # OpenRouter: Use LLM's intelligence to detect language automatically
-            # Try forward translation first
-            translated = _translator_forward.translate(text)
-            # If result is same as input, try reverse
-            if translated.strip().lower() == text.strip().lower():
-                translated = _translator_reverse.translate(text)
+            # OpenRouter: Use bidirectional translation with smart language detection
+            translated = _translator_forward.translate_bidirectional(text, is_source)
         else:
             # Google Translator: Use script-based detection
             if is_source is None:
