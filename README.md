@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/scripts/install.p
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/install-remote.sh | bash
+curl -fsSL https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/scripts/install-remote.sh | bash
 ```
 
 This will automatically:
