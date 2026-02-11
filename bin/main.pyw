@@ -4,24 +4,56 @@ import sys
 # Add parent directory to path for importing shiftlang package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import json
-import time
-import platform
-import keyboard
-import pyperclip
-from deep_translator import GoogleTranslator
-from shiftlang import OpenRouterTranslator
+def show_error_and_pause(title, message):
+    """Show error message and wait for key press before exiting."""
+    print(f"\n{'='*60}")
+    print(f"ERROR: {title}")
+    print(f"{'='*60}")
+    print(message)
+    print(f"{'='*60}")
+    print("\nPress any key to exit...")
+    try:
+        import msvcrt
+        msvcrt.getch()
+    except:
+        input()
+    sys.exit(1)
 
-# ──────────────────────── Import Shared Modules ─────────────
-from shiftlang import load_config, detect_is_source_language, create_translators
-from shiftlang.config import OS_NAME, CONFIG_PATH
+try:
+    import json
+    import time
+    import platform
+    import keyboard
+    import pyperclip
+    from deep_translator import GoogleTranslator
+    from shiftlang import OpenRouterTranslator
 
-config = load_config()
-print(f"DEBUG: Loaded config: {config}")
-print(f"DEBUG: Hotkey to register: {config['hotkey']}")
+    # ──────────────────────── Import Shared Modules ─────────────
+    from shiftlang import load_config, detect_is_source_language, create_translators
+    from shiftlang.config import OS_NAME, CONFIG_PATH
+except ImportError as e:
+    show_error_and_pause(
+        "Import Error",
+        f"Failed to import required module: {e}\n\n"
+        f"Python: {sys.executable}\n"
+        f"Make sure all dependencies are installed:\n"
+        f"  pip install -r requirements/requirements.txt"
+    )
+except Exception as e:
+    show_error_and_pause("Initialization Error", str(e))
+
+try:
+    config = load_config()
+    print(f"DEBUG: Loaded config: {config}")
+    print(f"DEBUG: Hotkey to register: {config['hotkey']}")
+except Exception as e:
+    show_error_and_pause("Config Load Error", f"Failed to load config: {e}")
 
 # ──────────────────────── Translators (cached) ─────────────
-_translator_forward, _translator_reverse, _provider = create_translators(config)
+try:
+    _translator_forward, _translator_reverse, _provider = create_translators(config)
+except Exception as e:
+    show_error_and_pause("Translator Init Error", f"Failed to create translators: {e}")
 
 # ──────────────────────── Clipboard (cross-platform) ──────
 if OS_NAME == "Windows":
@@ -258,9 +290,15 @@ def main():
     print(f"ShiftLang running — {src} ↔ {tgt}")
     print(f"Press {hotkey} to translate selected text.")
     print(f"OS: {OS_NAME}")
-    keyboard.add_hotkey(hotkey, translate_text)
-    keyboard.wait()
+    try:
+        keyboard.add_hotkey(hotkey, translate_text)
+        keyboard.wait()
+    except Exception as e:
+        show_error_and_pause("Runtime Error", f"Failed to register hotkey or run: {e}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        show_error_and_pause("Fatal Error", str(e))
