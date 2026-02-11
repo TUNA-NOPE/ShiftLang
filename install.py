@@ -633,6 +633,10 @@ def ask_choice(question, options, note=None):
         elif key == "ENTER":
             print()
             return cursor
+        elif key == "LEFT":
+            if allow_back:
+                print()
+                return None  # Signal to go back
         elif key == "ESC":
             print()
             return None
@@ -732,8 +736,12 @@ def _read_key():
                 os.close(fd)
 
 
-def ask_language(prompt, languages, default=None):
-    """Interactive language selector with arrow keys and live search. Returns list of languages, 'BACK', or None if ESC pressed."""
+def ask_language(prompt, languages, default=None, allow_back=True):
+    """Interactive language selector with arrow keys and live search. Returns (selected_list, went_back) tuple.
+    
+    selected_list is None if ESC pressed or went back.
+    Use LEFT arrow to go back to previous step.
+    """
     VIEWPORT_SIZE = 15
     all_languages = list(languages)
     items = list(all_languages)
@@ -798,11 +806,18 @@ def ask_language(prompt, languages, default=None):
                 print()
                 print(dim(f"    {' · '.join(hints)}"))
         print()
-        print(
-            dim(
-                "    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit • type 'back' to return"
+        if allow_back:
+            print(
+                dim(
+                    "    ↑↓ navigate • space select • ← back • enter confirm • backspace clear"
+                )
             )
-        )
+        else:
+            print(
+                dim(
+                    "    ↑↓ navigate • space select • enter confirm • backspace clear • esc exit"
+                )
+            )
         sys.stdout.flush()
 
     draw_full()
@@ -828,10 +843,14 @@ def ask_language(prompt, languages, default=None):
                 print()
                 print(green("  ✓") + f" {selected_names[0]} ↔ {selected_names[1]}")
                 print()
-                return selected_names
+                return selected_names, False
+        elif key == "LEFT":
+            if allow_back:
+                print()
+                return None, True
         elif key == "ESC":
             print()
-            return None
+            return None, False
         elif key == "BACKSPACE":
             if search_query:
                 search_query = search_query[:-1]
@@ -845,10 +864,7 @@ def ask_language(prompt, languages, default=None):
                 scroll_top = 0
                 draw_full()
         elif isinstance(key, str) and len(key) == 1 and key.isprintable():
-            # Check for 'back' typed in search
             new_query = search_query + key
-            if new_query.lower() == "back":
-                return "BACK"
             filtered = [l for l in all_languages if new_query.lower() in l.lower()]
             if filtered:
                 search_query = new_query
@@ -912,15 +928,10 @@ def ask_choice_with_back(question, options, note=None, allow_back=True, show_arr
 
 
 def ask_input_with_back(prompt, default=None, allow_back=True):
-    """Text input with back option via left arrow or typing 'back'. Returns (value, went_back)."""
+    """Text input with back option. Returns (value, went_back)."""
     suffix = f" {dim(f'({default})')}" if default else ""
     full_prompt = f"    {prompt}{suffix}: "
-    print()
-    if allow_back:
-        print(dim("    (type 'back' or press ← to return to previous step)"))
     val = tty_input(full_prompt).strip()
-    if allow_back and val.lower() == "back":
-        return None, True
     return val if val else default, False
 
 
@@ -1024,14 +1035,12 @@ def run_interactive_setup(args=None):
         # ──────────────────────── LANGUAGE SELECTION ────────────────────────
         elif current_step == STEP_LANGUAGE:
             clear_screen()
-            chosen_langs = ask_language("Select 2 languages", list(languages.keys()))
-            if chosen_langs is None:
+            chosen_langs, went_back = ask_language("Select 2 languages", list(languages.keys()))
+            if chosen_langs is None and not went_back:
                 print(dim("    Cancelled"))
                 print()
                 sys.exit(0)
-            if chosen_langs == "BACK":
-                went_back = True
-            else:
+            if chosen_langs:
                 source_lang = languages[chosen_langs[0]]
                 target_lang = languages[chosen_langs[1]]
             
