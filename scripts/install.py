@@ -728,29 +728,27 @@ def start_shiftlang():
     
     try:
         if OS_NAME == "Windows":
-            # Create a .bat wrapper for better error visibility
-            bat_path = create_windows_bat_wrapper()
+            # Create a .bat wrapper for debugging (manual use), but don't use it here
+            create_windows_bat_wrapper()
             
-            if bat_path and os.path.exists(bat_path):
-                # Use the .bat wrapper which keeps console open on error
+            # Use pythonw.exe to run without a console window (background mode)
+            pythonw_exe = os.path.join(os.path.dirname(python_exe), "pythonw.exe")
+            if os.path.exists(pythonw_exe):
                 subprocess.Popen(
-                    [bat_path],
-                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    [pythonw_exe, MAIN_SCRIPT],
+                    creationflags=subprocess.CREATE_NO_WINDOW,
                 )
             else:
-                # Fallback: run directly with pythonw.exe (no console window)
-                # This is better for autostart but harder to debug
-                pythonw_exe = os.path.join(os.path.dirname(python_exe), "pythonw.exe")
-                if os.path.exists(pythonw_exe):
-                    subprocess.Popen(
-                        [pythonw_exe, MAIN_SCRIPT],
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                    )
-                else:
-                    subprocess.Popen(
-                        [python_exe, MAIN_SCRIPT],
-                        creationflags=subprocess.CREATE_NEW_CONSOLE,
-                    )
+                # Fallback to python.exe but hide the window
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = 0  # SW_HIDE
+                subprocess.Popen(
+                    [python_exe, MAIN_SCRIPT],
+                    startupinfo=startupinfo,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
         else:
             # Start in background, suppress output
             subprocess.Popen(
@@ -759,8 +757,8 @@ def start_shiftlang():
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
-        print(green("    ✓") + " ShiftLang started")
-        print(dim("    (If it closes immediately, run shiftlang.bat to see errors)"))
+        print(green("    ✓") + " ShiftLang started in background")
+        print(dim("    (Run shiftlang.bat to see output for debugging)"))
         return True
     except Exception as e:
         print(red(f"    ✗ Failed to start: {e}"))
