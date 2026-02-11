@@ -6,7 +6,8 @@
 param(
     [switch]$Auto,
     [switch]$Update,
-    [switch]$Reconfigure
+    [switch]$Reconfigure,
+    [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
@@ -152,6 +153,7 @@ function Install-FromLocal {
     if ($Auto) { $installArgs += "--auto" }
     if ($Update) { $installArgs += "--update" }
     if ($Reconfigure) { $installArgs += "--reconfigure" }
+    if ($Force) { $installArgs += "--force" }
     
     Write-Host "    Running installer..." -ForegroundColor DarkGray
     Write-Host ""
@@ -188,11 +190,40 @@ function Install-FromRemote {
         if ($Auto) { $installArgs += "--auto" }
         if ($Update) { $installArgs += "--update" }
         if ($Reconfigure) { $installArgs += "--reconfigure" }
+        if ($Force) { $installArgs += "--force" }
         
         & $PythonPath $tempFile @installArgs
     }
     finally {
         Remove-Item $tempFile -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-InstallationHealthy {
+    """Check if the existing installation appears to be working."""
+    # Check for critical files/directories
+    $venvPath = Join-Path $INSTALL_DIR ".venv"
+    $reqPath = Join-Path $INSTALL_DIR "requirements"
+    $mainScript = Join-Path $INSTALL_DIR "bin" "main.pyw"
+    
+    if (-not (Test-Path $venvPath)) { return $false }
+    if (-not (Test-Path $reqPath)) { return $false }
+    if (-not (Test-Path $mainScript)) { return $false }
+    
+    return $true
+}
+
+function Remove-ExistingInstallation {
+    """Remove the existing ShiftLang installation."""
+    Write-Host "    Removing existing installation..." -ForegroundColor DarkGray
+    try {
+        Remove-Item -Recurse -Force $INSTALL_DIR -ErrorAction Stop
+        Write-Host "    ✓ Existing installation removed" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "    ✗ Failed to remove existing installation: $_" -ForegroundColor Red
+        return $false
     }
 }
 
@@ -203,6 +234,33 @@ function Install-ShiftLang {
     
     # Clone or update repository first
     $repoExists = Test-Path $INSTALL_DIR
+    
+    if ($repoExists) {
+        # Check if installation is healthy
+        $isHealthy = Test-InstallationHealthy
+        
+        if (-not $isHealthy -and ($Force -or $Auto)) {
+            # Force or auto mode: just remove and reinstall without asking
+            Write-Host "    Detected broken installation, removing..." -ForegroundColor DarkGray
+            if (-not (Remove-ExistingInstallation)) {
+                throw "Could not remove existing installation"
+            }
+            $repoExists = $false
+        }
+        elseif (-not $isHealthy) {
+            # Interactive mode: ask user
+            Write-Host ""
+            Write-Host "    ⚠ Existing installation appears to be incomplete or broken." -ForegroundColor Yellow
+            Write-Host ""
+            $choice = Read-Host "    Remove and reinstall? (Y/n)"
+            if ($choice -eq '' -or $choice -match '^[Yy]') {
+                if (-not (Remove-ExistingInstallation)) {
+                    throw "Could not remove existing installation"
+                }
+                $repoExists = $false
+            }
+        }
+    }
     
     if ($repoExists) {
         Write-Host "    Updating repository..." -ForegroundColor DarkGray
