@@ -1,9 +1,0 @@
-{
-  "hotkey": "ctrl+shift+q",
-  "auto_start": true,
-  "source_language": "en",
-  "target_language": "iw",
-  "translation_provider": "openrouter",
-  "openrouter_api_key": "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",
-  "openrouter_model": "nvidia/nemotron-3-nano-30b-a3b:free"
-}

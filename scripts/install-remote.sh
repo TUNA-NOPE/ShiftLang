@@ -49,7 +49,7 @@ echo ""
 
 # Run the installer
 if command -v python3 &>/dev/null; then
-    python3 install.py "$@"
+    python3 scripts/install.py "$@"
 else
-    python install.py "$@"
+    python scripts/install.py "$@"
 fi

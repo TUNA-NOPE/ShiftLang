@@ -8,7 +8,7 @@
 # - If args are provided → passes them through as-is
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.json"
+CONFIG_FILE="$SCRIPT_DIR/../config/config.json"
 
 # Find Python
 if command -v python3 &>/dev/null; then

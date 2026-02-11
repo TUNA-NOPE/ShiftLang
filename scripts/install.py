@@ -16,7 +16,7 @@ import argparse
 import time
 
 # ──────────────────────── Constants ────────────────────────
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "config.json")
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_NAME = "ShiftLang"
 OS_NAME = platform.system()

@@ -111,7 +111,7 @@ function Install-ShiftLang {
     Write-Host "    Running installer..." -ForegroundColor DarkGray
     Write-Host ""
     
-    & $PythonPath install.py @installArgs
+    & $PythonPath scripts/install.py @installArgs
 }
 
 # Main execution
