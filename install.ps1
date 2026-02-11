@@ -95,7 +95,7 @@ function Install-ShiftLang {
     }
     else {
         Write-Host "    Cloning repository..." -ForegroundColor DarkGray
-        $null = git clone $REPO_URL $INSTALL_DIR 2>&1
+        $null = git clone -q $REPO_URL $INSTALL_DIR
         Set-Location $INSTALL_DIR
     }
     
