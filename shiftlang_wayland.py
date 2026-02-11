@@ -7,12 +7,31 @@ import json
 import subprocess
 import threading
 import time
+import fcntl
 from pathlib import Path
 
 # Thread lock to prevent race conditions when multiple input devices detect the same hotkey
 _hotkey_lock = threading.Lock()
 
 OS_NAME = "Linux"
+
+# ──────────────────────── Single Instance Lock ─────────────
+_LOCK_FILE = "/tmp/shiftlang_wayland.lock"
+_lock_fd = None
+
+def _ensure_single_instance():
+    """Ensure only one instance of ShiftLang is running."""
+    global _lock_fd
+    _lock_fd = open(_LOCK_FILE, "w")
+    try:
+        fcntl.flock(_lock_fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _lock_fd.write(str(os.getpid()))
+        _lock_fd.flush()
+        return True
+    except (IOError, OSError):
+        print("ERROR: ShiftLang is already running!")
+        print("Only one instance can run at a time.")
+        return False
 
 # ──────────────────────── Config ───────────────────────────
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
@@ -418,4 +437,6 @@ class Listener:
 
 # ──────────────────────── Main ─────────────────────────────
 if __name__ == "__main__":
+    if not _ensure_single_instance():
+        sys.exit(1)
     Listener().start()
