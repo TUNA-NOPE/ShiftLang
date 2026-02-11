@@ -1,18 +1,20 @@
 # ShiftLang Remote Installer for Windows
-# Usage: irm https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/install.ps1 | iex
+# Usage: irm https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main/scripts/install.ps1 | iex
 #
 # This script downloads and installs ShiftLang on Windows
 
 param(
     [switch]$Auto,
     [switch]$Update,
-    [switch]$Reconfigure
+    [switch]$Reconfigure,
+    [switch]$NoSelfUpdate
 )
 
 $ErrorActionPreference = "Stop"
 
 $REPO_URL = "https://github.com/TUNA-NOPE/ShiftLang.git"
 $INSTALL_DIR = "$env:USERPROFILE\ShiftLang"
+$RAW_URL = "https://raw.githubusercontent.com/TUNA-NOPE/ShiftLang/main"
 
 function Write-Banner {
     Write-Host ""
@@ -42,7 +44,6 @@ function Test-Python {
         exit 1
     }
     
-    # Check Python version
     try {
         $versionOutput = & $pythonCmd.Source --version 2>&1
         $versionString = $versionOutput -replace "Python "
@@ -77,41 +78,130 @@ function Test-Git {
     return $gitCmd.Source
 }
 
-function Install-ShiftLang {
+function Get-InstallPyPath {
+    # Returns the expected path to install.py
+    return Join-Path $INSTALL_DIR "scripts" "install.py"
+}
+
+function Test-InstallPyExists {
+    $installPy = Get-InstallPyPath
+    return Test-Path $installPy
+}
+
+function Install-FromLocal {
     param(
         [string]$PythonPath
     )
     
-    # Clone or update repository
-    if (Test-Path $INSTALL_DIR) {
-        Write-Host "    Updating repository..." -ForegroundColor DarkGray
-        Set-Location $INSTALL_DIR
-        try {
-            $null = git pull origin main 2>&1
-        }
-        catch {
-            Write-Host "    ⚠ Using existing version" -ForegroundColor Yellow
-        }
-    }
-    else {
-        Write-Host "    Cloning repository..." -ForegroundColor DarkGray
-        $null = git clone -q $REPO_URL $INSTALL_DIR
-        Set-Location $INSTALL_DIR
-    }
+    $installPy = Get-InstallPyPath
     
-    Write-Host ""
-    
-    # Build arguments for install.py
+    # Build arguments
     $installArgs = @()
     if ($Auto) { $installArgs += "--auto" }
     if ($Update) { $installArgs += "--update" }
     if ($Reconfigure) { $installArgs += "--reconfigure" }
     
-    # Run the installer
-    Write-Host "    Running installer..." -ForegroundColor DarkGray
+    Write-Host "    Running installer from: $installPy" -ForegroundColor DarkGray
     Write-Host ""
     
-    & $PythonPath scripts/install.py @installArgs
+    & $PythonPath $installPy @installArgs
+}
+
+function Install-FromRemote {
+    param(
+        [string]$PythonPath
+    )
+    
+    Write-Host "    Downloading and running installer directly..." -ForegroundColor DarkGray
+    Write-Host ""
+    
+    # Build arguments string for passing to remote script
+    $argString = ""
+    if ($Auto) { $argString += " --auto" }
+    if ($Update) { $argString += " --update" }
+    if ($Reconfigure) { $argString += " --reconfigure" }
+    
+    # Download and execute install.py directly
+    $installPyUrl = "$RAW_URL/scripts/install.py"
+    
+    try {
+        # Use Invoke-WebRequest to download to temp file and execute
+        $tempFile = [System.IO.Path]::GetTempFileName() + ".py"
+        Invoke-WebRequest -Uri $installPyUrl -OutFile $tempFile -UseBasicParsing
+        
+        $installArgs = @()
+        if ($Auto) { $installArgs += "--auto" }
+        if ($Update) { $installArgs += "--update" }
+        if ($Reconfigure) { $installArgs += "--reconfigure" }
+        
+        & $PythonPath $tempFile @installArgs
+        
+        # Cleanup
+        Remove-Item $tempFile -ErrorAction SilentlyContinue
+    }
+    catch {
+        Write-Host "    ✗ Failed to download/run remote installer: $_" -ForegroundColor Red
+        throw
+    }
+}
+
+function Install-ShiftLang {
+    param(
+        [string]$PythonPath
+    )
+    
+    # Clone or update repository first
+    $repoUpdated = $false
+    if (Test-Path $INSTALL_DIR) {
+        Write-Host "    Updating repository..." -ForegroundColor DarkGray
+        Set-Location $INSTALL_DIR
+        try {
+            $pullOutput = git pull origin main 2>&1
+            $repoUpdated = $true
+            if ($pullOutput -match "Already up to date") {
+                Write-Host "    ✓ Repository is up to date" -ForegroundColor Green
+            }
+            else {
+                Write-Host "    ✓ Repository updated" -ForegroundColor Green
+            }
+        }
+        catch {
+            Write-Host "    ⚠ Git pull failed, using existing version" -ForegroundColor Yellow
+        }
+    }
+    else {
+        Write-Host "    Cloning repository..." -ForegroundColor DarkGray
+        try {
+            $null = git clone -q $REPO_URL $INSTALL_DIR 2>&1
+            $repoUpdated = $true
+            Write-Host "    ✓ Repository cloned" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "    ✗ Git clone failed: $_" -ForegroundColor Red
+            throw
+        }
+    }
+    
+    Write-Host ""
+    
+    # Check if install.py exists locally
+    $installPyExists = Test-InstallPyExists
+    
+    if ($installPyExists) {
+        # Try local install first
+        try {
+            Install-FromLocal -PythonPath $PythonPath
+            return
+        }
+        catch {
+            Write-Host ""
+            Write-Host "    ⚠ Local installer failed, trying remote..." -ForegroundColor Yellow
+            Write-Host ""
+        }
+    }
+    
+    # Fall back to remote install
+    Install-FromRemote -PythonPath $PythonPath
 }
 
 # Main execution
@@ -126,5 +216,12 @@ $null = Test-Git
 Write-Host "    ✓ Python found" -ForegroundColor Green
 Write-Host "    ✓ Git found" -ForegroundColor Green
 Write-Host ""
+
+# Check if we're being run from web (no local context)
+if ($MyInvocation.MyCommand.Path -eq $null) {
+    # Running from web (irm | iex)
+    Write-Host "    Detected remote execution mode" -ForegroundColor DarkGray
+    Write-Host ""
+}
 
 Install-ShiftLang -PythonPath $pythonPath
