@@ -50,20 +50,12 @@ class OpenRouterTranslator:
 
         payload = {
             "model": self.model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
+            "messages": [{"role": "user", "content": prompt}],
         }
 
         try:
             response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                timeout=30
+                self.api_url, headers=headers, json=payload, timeout=30
             )
 
             # Handle 401 Unauthorized specifically
@@ -94,9 +86,98 @@ class OpenRouterTranslator:
             print(f"OpenRouter response parsing error: {e}")
             return text
 
+    def translate_bidirectional(self, text, detected_is_source=None):
+        """
+        Translate text using auto-detection for bidirectional translation.
+
+        Args:
+            text: Text to translate
+            detected_is_source: True if detected as source language, False if target, None for auto-detect
+
+        Returns:
+            Translated text
+        """
+        if not text or not text.strip():
+            return text
+
+        # Normalize language names
+        source_lang = self._normalize_language_name(self.source)
+        target_lang = self._normalize_language_name(self.target)
+
+        # Build a smarter prompt that tells the LLM to auto-detect and translate to the other language
+        prompt = f"""Translate the following text to the appropriate language.
+
+If the text is in {source_lang}, translate it to {target_lang}.
+If the text is in {target_lang}, translate it to {source_lang}.
+If the text is in any other language, translate it to {target_lang}.
+
+Only provide the translation, without any explanations, quotes, or additional text.
+Do not repeat the original text.
+
+Text to translate:
+{text}"""
+
+        # Make API request
+        headers = {
+            "Content-Type": "application/json",
+        }
+
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+
+        try:
+            response = requests.post(
+                self.api_url, headers=headers, json=payload, timeout=30
+            )
+
+            if response.status_code == 401:
+                print("✗ OpenRouter authentication failed")
+                print("  API key is missing or invalid")
+                print("  Get your API key at: https://openrouter.ai/keys")
+                print("  Then run: python install.py --reconfigure")
+                return text
+
+            response.raise_for_status()
+
+            result = response.json()
+            translated = result["choices"][0]["message"]["content"].strip()
+            translated = translated.strip('"').strip("'")
+
+            # If the result is the same as input (case-insensitive), try the other direction explicitly
+            if translated.lower() == text.lower():
+                # Swap source and target for the second attempt
+                reverse_prompt = f"""Translate the following text from {target_lang} to {source_lang}.
+Only provide the translation, without any explanations, quotes, or additional text.
+
+Text to translate:
+{text}"""
+                payload["messages"][0]["content"] = reverse_prompt
+                response = requests.post(
+                    self.api_url, headers=headers, json=payload, timeout=30
+                )
+                response.raise_for_status()
+                result = response.json()
+                translated = result["choices"][0]["message"]["content"].strip()
+                translated = translated.strip('"').strip("'")
+
+            return translated
+
+        except requests.exceptions.RequestException as e:
+            print(f"OpenRouter API error: {e}")
+            if "401" in str(e):
+                print("  Hint: Check your API key in config.json")
+            return text
+        except (KeyError, IndexError) as e:
+            print(f"OpenRouter response parsing error: {e}")
+            return text
+
     def _build_prompt(self, text):
         """Build translation prompt for the LLM."""
-        # Normalize language names
         source_lang = self._normalize_language_name(self.source)
         target_lang = self._normalize_language_name(self.target)
 

@@ -283,6 +283,8 @@ else:
 
 # ──────────────────────── Translation Logic ────────────────
 _is_translating = False
+_last_translation_time = 0
+_MIN_TRANSLATION_INTERVAL = 0.5  # Minimum seconds between translations
 
 
 def _get_hotkey_modifier_keys():
@@ -293,12 +295,19 @@ def _get_hotkey_modifier_keys():
 
 
 def translate_text():
-    global _is_translating
+    global _is_translating, _last_translation_time
 
+    # Debounce: prevent rapid re-triggering
+    current_time = time.time()
+    if current_time - _last_translation_time < _MIN_TRANSLATION_INTERVAL:
+        print("Translation debounced - too soon since last translation")
+        return
+    
     if _is_translating:
         return
 
     _is_translating = True
+    _last_translation_time = current_time
     try:
         # 1. Wait for hotkey keys to be released
         mod_keys = _get_hotkey_modifier_keys()
@@ -335,12 +344,8 @@ def translate_text():
         is_source = _detect_is_source_language(text_to_translate)
 
         if provider == "openrouter":
-            # OpenRouter: Use LLM's intelligence to detect language automatically
-            # Try forward translation first
-            translated = _translator_forward.translate(text_to_translate)
-            # If result is same as input, try reverse
-            if translated.strip().lower() == text_to_translate.strip().lower():
-                translated = _translator_reverse.translate(text_to_translate)
+            # OpenRouter: Use bidirectional translation with smart language detection
+            translated = _translator_forward.translate_bidirectional(text_to_translate, is_source)
         else:
             # Google Translator: Use script-based detection
             if is_source is None:
@@ -369,10 +374,29 @@ def translate_text():
 
         print(f"Translated: {translated}")
 
+        # Validate translation result
+        if not translated or translated.strip() == text_to_translate.strip():
+            print("Translation returned same text - skipping paste")
+            return
+        
+        # Check for doubled text (heuristic: if translation contains the original twice)
+        original_stripped = text_to_translate.strip()
+        translated_stripped = translated.strip()
+        if len(translated_stripped) >= len(original_stripped) * 2:
+            # Check if it's doubled
+            if original_stripped in translated_stripped and translated_stripped.count(original_stripped) >= 2:
+                print("Warning: Detected doubled text in translation, using first half only")
+                # Try to extract just the first half
+                mid = len(translated_stripped) // 2
+                if translated_stripped[:mid] == translated_stripped[mid:]:
+                    translated = translated_stripped[:mid]
+
         # 6. Paste translated text
         if copy_to_clipboard_no_history(translated):
+            # Small delay to ensure clipboard is ready
+            time.sleep(0.05)
             keyboard.press_and_release(_PASTE_KEYS)
-            time.sleep(0.1)
+            time.sleep(0.15)
 
             # 7. Clear clipboard if configured to prevent history spam
             if config.get("clear_clipboard_after_paste", True):
