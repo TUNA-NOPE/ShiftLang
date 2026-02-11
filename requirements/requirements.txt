@@ -1,4 +1,5 @@
 keyboard
 pyperclip
 deep-translator
+translators
 requests

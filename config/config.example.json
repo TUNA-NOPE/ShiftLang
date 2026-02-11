@@ -6,7 +6,7 @@
   "translation_provider": "google",
   "openrouter_api_key": "",
   "openrouter_model": "openrouter/free",
-  "_comment_provider": "Use 'google' for free Google Translate or 'openrouter' for AI-powered translation",
-  "_comment_api_key": "Required if translation_provider is 'openrouter'. Get your key at: https://openrouter.ai/keys",
-  "_comment_model": "OpenRouter model to use. Free options: 'openrouter/free', 'google/gemini-2.0-flash-exp:free', 'meta-llama/llama-3.1-8b-instruct:free', 'nvidia/nemotron-3-nano-30b-a3b:free', 'arcee-ai/trinity-mini:free'. Paid options: 'google/gemini-flash-1.5', 'openai/gpt-4o-mini', 'meta-llama/llama-3.3-70b-instruct'"
+  "_comment_provider": "Available free providers (no API key): google, mymemory, bing, alibaba, baidu, yandex, reverso, sogou, youdao, tencent, itranslate, argos. For AI translation use: openrouter",
+  "_comment_api_key": "Required only for OpenRouter. Get your key at: https://openrouter.ai/keys",
+  "_comment_model": "OpenRouter models: 'openrouter/free', 'google/gemini-2.0-flash-exp:free', 'meta-llama/llama-3.1-8b-instruct:free', 'nvidia/nemotron-3-nano-30b-a3b:free', 'arcee-ai/trinity-mini:free' (free) or 'google/gemini-flash-1.5', 'openai/gpt-4o-mini', 'meta-llama/llama-3.3-70b-instruct' (paid)"
 }

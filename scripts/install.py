@@ -39,6 +39,24 @@ DEFAULTS = {
     "Linux": "ctrl+shift+q",
 }
 
+# Provider definitions
+FREE_PROVIDERS = [
+    ("google", "Google Translate — fast, reliable, 130+ languages"),
+    ("bing", "Bing Microsoft Translator — Microsoft backed"),
+    ("yandex", "Yandex Translate — great for Russian & Eastern European"),
+    ("mymemory", "MyMemory — 5000 chars/day free limit"),
+    ("baidu", "Baidu Translate — great for Chinese"),
+    ("alibaba", "Alibaba Translate — great for Chinese"),
+    ("tencent", "Tencent (QQ) Translate — great for Chinese"),
+    ("sogou", "Sogou Translate — Chinese search engine backed"),
+    ("youdao", "Youdao Translate — popular in China"),
+    ("reverso", "Reverso Translate — context-aware"),
+    ("itranslate", "Itranslate — simple & fast"),
+    ("argos", "Argos (LibreTranslate) — open source"),
+]
+
+PROVIDER_MAP = {name: id for id, name in FREE_PROVIDERS}
+
 
 # ──────────────────────── TTY Input Helper ─────────────────
 def get_tty():
@@ -948,6 +966,52 @@ def ask_input_with_back(prompt, default=None, allow_back=True):
     return val if val else default, False
 
 
+def ask_provider_with_back(allow_back=True):
+    """Ask user to select a translation provider with back navigation.
+    
+    Returns:
+        (provider_id, is_openrouter, went_back) tuple
+    """
+    # First, choose category
+    clear_screen()
+    category_choice, went_back, _ = ask_choice_with_back(
+        "Choose translation provider category",
+        [
+            "Free Providers (no API key required)",
+            "AI-Powered (OpenRouter - free tier available)",
+        ],
+        note="All providers support 130+ languages",
+        allow_back=allow_back,
+    )
+    
+    if went_back or category_choice is None:
+        return None, False, went_back
+    
+    if category_choice == 0:
+        # Free providers selection
+        provider_options = [name for _, name in FREE_PROVIDERS]
+        
+        clear_screen()
+        provider_choice, went_back, _ = ask_choice_with_back(
+            "Choose a free translation provider",
+            provider_options,
+            note="All are free and require no signup",
+            allow_back=True,
+        )
+        
+        if went_back:
+            return None, False, True
+        if provider_choice is None:
+            return None, False, False
+        
+        provider_id = FREE_PROVIDERS[provider_choice][0]
+        return provider_id, False, False
+    
+    else:
+        # OpenRouter
+        return "openrouter", True, False
+
+
 def run_interactive_setup(args=None):
     """Run the interactive preferences questionnaire with back navigation."""
     # State definitions
@@ -1064,32 +1128,20 @@ def run_interactive_setup(args=None):
         
         # ──────────────────────── TRANSLATION PROVIDER ────────────────────────
         elif current_step == STEP_PROVIDER:
-            clear_screen()
-            provider_choice, went_back, _ = ask_choice_with_back(
-                "Choose translation provider",
-                [
-                    "Google Translate (Fast, free, no setup)",
-                    "OpenRouter AI (More accurate, requires internet)",
-                ],
-                note="Google Translate is recommended for most users",
-                allow_back=step_index > 0,
+            provider, is_openrouter, went_back = ask_provider_with_back(
+                allow_back=step_index > 0
             )
-            if provider_choice is None and not went_back:
-                print(dim("    Cancelled"))
-                print()
-                sys.exit(0)
             
             if went_back:
                 step_index = max(0, step_index - 1)
                 continue
             
-            if provider_choice == 0:
-                provider = "google"
-                api_key = ""
-                model = ""
-            else:
-                provider = "openrouter"
-                
+            if provider is None:
+                print(dim("    Cancelled"))
+                print()
+                sys.exit(0)
+            
+            if is_openrouter:
                 # OpenRouter model selection loop (allows going back)
                 model_step_active = True
                 while model_step_active:
@@ -1112,7 +1164,8 @@ def run_interactive_setup(args=None):
                     if went_back:
                         # Go back to provider selection
                         model_step_active = False
-                        step_index = max(0, step_index - 1)
+                        # Reset provider to trigger re-selection
+                        provider = None
                         break
                     if model_choice is None:
                         print(dim("    Cancelled"))
@@ -1214,9 +1267,13 @@ def run_interactive_setup(args=None):
                         # We came from API step and went back to model selection
                         continue
                 
-                if went_back and step_index != ALL_STEPS.index(STEP_PROVIDER):
-                    # We went back further than model selection
+                if went_back and provider is None:
+                    # We went back further than model selection, re-trigger provider selection
                     continue
+            else:
+                # Free provider selected - no API key needed
+                api_key = ""
+                model = ""
             
             if not went_back:
                 step_index += 1
@@ -1317,11 +1374,17 @@ def run_interactive_setup(args=None):
     print()
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
-    if provider == "google":
-        print(f"    Provider     {dim('Google Translate')}")
-    else:
+    if provider == "openrouter":
         print(f"    Provider     {dim('OpenRouter AI')}")
         print(f"    Model        {dim(model if model else 'openrouter/free')}")
+    else:
+        # Find display name for the provider
+        display_name = provider.capitalize()
+        for pid, pname in FREE_PROVIDERS:
+            if pid == provider:
+                display_name = pname.split(" — ")[0]
+                break
+        print(f"    Provider     {dim(display_name)}")
     print(f"    Hotkey       {dim(hotkey)}")
     print(f"    Auto-start   {dim('enabled' if auto_start else 'disabled')}")
     print()
@@ -1377,11 +1440,16 @@ def run_auto_setup(args=None):
     print(green("  ✓") + " " + bold("Ready"))
     print()
     print(f"    Languages    {dim(source_lang)} → {dim(target_lang)}")
-    if provider == "google":
-        print(f"    Provider     {dim('Google Translate')}")
-    else:
+    if provider == "openrouter":
         print(f"    Provider     {dim('OpenRouter AI')}")
         print(f"    Model        {dim(model if model else 'openrouter/free')}")
+    else:
+        display_name = provider.capitalize()
+        for pid, pname in FREE_PROVIDERS:
+            if pid == provider:
+                display_name = pname.split(" — ")[0]
+                break
+        print(f"    Provider     {dim(display_name)}")
     print(f"    Hotkey       {dim(hotkey)}")
     print()
     print()

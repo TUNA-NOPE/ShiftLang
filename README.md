@@ -4,7 +4,8 @@ A lightweight background tool that instantly translates selected text between an
 
 ## Features
 
-- **Any-to-any translation** — supports 130+ languages via Google Translate
+- **Any-to-any translation** — supports 130+ languages via multiple translation providers
+- **13+ free providers** — Google, Bing, Yandex, Baidu, and more (no API keys needed!)
 - **AI-powered translation** — use OpenRouter LLM for more accurate translations (optional)
 - **Hotkey-driven** — press a hotkey to translate any selected text in-place
 - **Auto language detection** — detects the input language and translates accordingly
@@ -58,7 +59,7 @@ The installer will automatically:
 3. Install all dependencies into the isolated environment
 4. Guide you through a preferences questionnaire:
    - **Language selection** (choose 2 languages)
-   - **Translation provider** (Google Translate or OpenRouter AI)
+   - **Translation provider** (13+ free options or OpenRouter AI)
    - **Auto-start preference**
    - **Hotkey configuration**
 5. Configure everything for you
@@ -71,26 +72,35 @@ The installer will automatically:
 
 ## Translation Providers
 
-ShiftLang supports two translation providers (you can choose during installation):
+ShiftLang supports **13+ free translation providers** that work without any API key:
 
-### Google Translate (Default)
-- ✓ Very fast (instant)
-- ✓ Free, unlimited
-- ✓ No setup required
-- ✓ 130+ languages
-- Best for general use
+### Free Providers (No API Key Required)
 
-### OpenRouter AI
-- ✓ More accurate translations
-- ✓ Better context understanding
-- ✓ AI-powered (uses `openrouter/free` model)
-- ✓ Free tier available (optional API key for higher limits)
-- Best for important or complex translations
+| Provider | Description | Best For |
+|----------|-------------|----------|
+| **Google** | Fast, reliable, 130+ languages | General use (default) |
+| **Bing** | Microsoft Translator | Microsoft ecosystem users |
+| **Yandex** | Yandex Translate | Russian & Eastern European languages |
+| **MyMemory** | 5000 characters/day free | Occasional use |
+| **Baidu** | Baidu Translate | Chinese translation |
+| **Alibaba** | Alibaba Translate | Chinese translation |
+| **Tencent (QQ)** | Tencent Translate | Chinese translation |
+| **Sogou** | Sogou Translate | Chinese search-backed |
+| **Youdao** | Youdao Translate | Popular in China |
+| **Reverso** | Context-aware translation | Context understanding |
+| **Itranslate** | Simple & fast | Quick translations |
+| **Argos** | LibreTranslate (open source) | Privacy-conscious users |
+
+### AI-Powered Provider
+
+| Provider | Description | Best For |
+|----------|-------------|----------|
+| **OpenRouter** | AI-powered translation | High accuracy, complex text |
 
 ### Choosing Your Provider
 
 **During installation:**
-The installer will ask which provider you want to use.
+The installer will show you all available providers and let you choose.
 
 **After installation:**
 Edit your `config/config.json` to switch providers:
@@ -101,16 +111,32 @@ Edit your `config/config.json` to switch providers:
   "auto_start": true,
   "source_language": "english",
   "target_language": "hebrew",
-  "translation_provider": "openrouter",
-  "openrouter_api_key": ""
+  "translation_provider": "bing",
+  "openrouter_api_key": "",
+  "openrouter_model": "openrouter/free"
 }
 ```
+
+**Available provider values:**
+- `google` — Google Translate
+- `bing` — Bing Microsoft Translator
+- `yandex` — Yandex Translate
+- `mymemory` — MyMemory (5000 chars/day)
+- `baidu` — Baidu Translate
+- `alibaba` — Alibaba Translate
+- `tencent` — Tencent (QQ) Translate
+- `sogou` — Sogou Translate
+- `youdao` — Youdao Translate
+- `reverso` — Reverso Translate
+- `itranslate` — Itranslate
+- `argos` — Argos (LibreTranslate)
+- `openrouter` — OpenRouter AI (requires API key for paid models)
 
 **Note:** The `openrouter_api_key` field is optional. The free tier works without an API key, but you can get an API key from [OpenRouter](https://openrouter.ai/) for higher rate limits.
 
 ## Reconfigure Settings
 
-To change your languages, hotkey, or auto-start preference without reinstalling:
+To change your languages, hotkey, or provider without reinstalling:
 
 ```bash
 # Windows
@@ -152,7 +178,7 @@ ShiftLang/
 │   ├── __init__.py          # Package exports
 │   ├── config.py            # Configuration management
 │   ├── language.py          # Language detection utilities
-│   ├── translator.py        # Translator factory
+│   ├── translator.py        # Translator factory with 13+ providers
 │   └── openrouter.py        # OpenRouter AI provider
 ├── scripts/                 # Install scripts
 │   ├── install.py           # Interactive installer
@@ -178,7 +204,8 @@ ShiftLang/
 |-------------------|----------------------------------|
 | `keyboard`        | Global hotkey registration       |
 | `pyperclip`       | Cross-platform clipboard access  |
-| `deep-translator` | Google Translate API wrapper     |
+| `deep-translator` | Google & MyMemory translation    |
+| `translators`     | Bing, Baidu, Yandex, etc.        |
 | `requests`        | HTTP client for OpenRouter API   |
 
 ### System Requirements
