@@ -1,24 +1,68 @@
 import os
 import sys
+import traceback
 
 # Add parent directory to path for importing shiftlang package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-def show_error_and_pause(title, message):
+# Log file for debugging startup errors
+LOG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "shiftlang_error.log")
+
+def log_error(title, message, exc_info=None):
+    """Log error to file for debugging."""
+    try:
+        with open(LOG_FILE, "w", encoding="utf-8") as f:
+            f.write(f"{'='*60}\n")
+            f.write(f"ERROR: {title}\n")
+            f.write(f"{'='*60}\n")
+            f.write(f"{message}\n")
+            if exc_info:
+                f.write(f"\nTraceback:\n{exc_info}\n")
+            f.write(f"\nPython: {sys.executable}\n")
+            f.write(f"Python Version: {sys.version}\n")
+            f.write(f"Working Directory: {os.getcwd()}\n")
+            f.write(f"Python Path: {sys.path}\n")
+            f.write(f"{'='*60}\n")
+    except Exception:
+        pass  # If logging fails, continue to show error
+
+def show_error_and_pause(title, message, exc_info=None):
     """Show error message and wait for key press before exiting."""
+    # Log error first
+    log_error(title, message, exc_info)
+    
+    # Ensure we're using a console for output (not pythonw.exe)
+    if sys.stdout is None or sys.stderr is None:
+        # Reattach to console if running as pythonw
+        try:
+            import ctypes
+            ctypes.windll.kernel32.AllocConsole()
+            sys.stdout = open('CONOUT$', 'w')
+            sys.stderr = sys.stdout
+        except Exception:
+            pass  # Can't create console, just exit
+    
     print(f"\n{'='*60}")
     print(f"ERROR: {title}")
     print(f"{'='*60}")
     print(message)
+    if exc_info:
+        print(f"\nTraceback:\n{exc_info}")
+    print(f"\n{'='*60}")
+    print(f"Error log saved to: {LOG_FILE}")
     print(f"{'='*60}")
-    print("\nPress any key to exit...")
+    print("\nPress Enter to exit...")
     try:
-        import msvcrt
-        msvcrt.getch()
-    except:
         input()
+    except:
+        try:
+            import msvcrt
+            msvcrt.getch()
+        except:
+            pass
     sys.exit(1)
 
+# Wrap all imports in try-except to catch startup errors
 try:
     import json
     import time
@@ -32,15 +76,17 @@ try:
     from shiftlang import load_config, detect_is_source_language, create_translators
     from shiftlang.config import OS_NAME, CONFIG_PATH
 except ImportError as e:
+    tb = traceback.format_exc()
     show_error_and_pause(
         "Import Error",
         f"Failed to import required module: {e}\n\n"
-        f"Python: {sys.executable}\n"
         f"Make sure all dependencies are installed:\n"
-        f"  pip install -r requirements/requirements.txt"
+        f"  {sys.executable} -m pip install -r requirements/requirements.txt",
+        tb
     )
 except Exception as e:
-    show_error_and_pause("Initialization Error", str(e))
+    tb = traceback.format_exc()
+    show_error_and_pause("Initialization Error", str(e), tb)
 
 try:
     config = load_config()
@@ -287,18 +333,30 @@ def main():
     hotkey = config["hotkey"]
     src = config["source_language"]
     tgt = config["target_language"]
+    
+    # Ensure console is visible for debugging (comment out for production)
     print(f"ShiftLang running — {src} ↔ {tgt}")
     print(f"Press {hotkey} to translate selected text.")
     print(f"OS: {OS_NAME}")
+    print(f"Provider: {_provider}")
+    print("")
+    print("Running in background... (Press Ctrl+C to stop)")
+    print("")
+    
     try:
         keyboard.add_hotkey(hotkey, translate_text)
         keyboard.wait()
     except Exception as e:
-        show_error_and_pause("Runtime Error", f"Failed to register hotkey or run: {e}")
+        tb = traceback.format_exc()
+        show_error_and_pause("Runtime Error", f"Failed to register hotkey or run: {e}", tb)
 
 
 if __name__ == "__main__":
     try:
         main()
+    except KeyboardInterrupt:
+        print("\n\nShiftLang stopped by user.")
+        sys.exit(0)
     except Exception as e:
-        show_error_and_pause("Fatal Error", str(e))
+        tb = traceback.format_exc()
+        show_error_and_pause("Fatal Error", str(e), tb)

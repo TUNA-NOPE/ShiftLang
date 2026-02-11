@@ -269,10 +269,13 @@ def create_virtualenv():
     """Create a virtual environment in the project directory."""
     print(dim(f"    Creating virtual environment..."))
 
-    # Try uv first (faster)
+    # Try uv first (faster) - use copy link mode to avoid hardlink issues with cloud storage
     if has_uv():
         result = subprocess.run(
-            ["uv", "venv", VENV_DIR], cwd=PROJECT_DIR, capture_output=True, text=True
+            ["uv", "venv", VENV_DIR, "--seed"],  # --seed ensures pip is installed
+            cwd=PROJECT_DIR, 
+            capture_output=True, 
+            text=True
         )
         if result.returncode == 0:
             print(green("    ✓") + " Virtual environment created")
@@ -299,6 +302,45 @@ def create_virtualenv():
         return False
 
 
+def ensure_pip_in_venv():
+    """Ensure pip is installed in the virtual environment."""
+    # Check if pip exists
+    pip_path = os.path.join(os.path.dirname(VENV_PYTHON), "pip.exe" if OS_NAME == "Windows" else "pip")
+    if os.path.exists(pip_path):
+        return True
+    
+    print(dim("    Installing pip in virtual environment..."))
+    try:
+        # Try to install pip using ensurepip
+        result = subprocess.run(
+            [VENV_PYTHON, "-m", "ensurepip", "--upgrade"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return True
+        
+        # If ensurepip fails, try downloading get-pip.py
+        import urllib.request
+        get_pip_path = os.path.join(PROJECT_DIR, "get-pip.py")
+        urllib.request.urlretrieve("https://bootstrap.pypa.io/get-pip.py", get_pip_path)
+        
+        result = subprocess.run(
+            [VENV_PYTHON, get_pip_path],
+            capture_output=True,
+            text=True,
+        )
+        try:
+            os.remove(get_pip_path)
+        except:
+            pass
+            
+        return result.returncode == 0
+    except Exception as e:
+        print(dim(f"    Could not install pip: {e}"))
+        return False
+
+
 # ──────────────────────── Install dependencies ─────────────
 def install_dependencies():
     # Use Linux-specific requirements if on Linux, otherwise use base requirements
@@ -318,10 +360,10 @@ def install_dependencies():
     print(dim("    Installing dependencies..."))
     print()
 
-    # Try uv pip (fastest)
+    # Try uv pip (fastest) - use copy link mode to avoid hardlink issues with cloud storage
     if has_uv():
         result = subprocess.run(
-            ["uv", "pip", "install", "-r", req, "--python", VENV_PYTHON],
+            ["uv", "pip", "install", "-r", req, "--python", VENV_PYTHON, "--link-mode=copy"],
             cwd=PROJECT_DIR,
         )
         if result.returncode == 0:
@@ -329,7 +371,14 @@ def install_dependencies():
             print(green("    ✓") + " Dependencies installed")
             return True
         else:
-            print(dim("    Trying alternative method..."))
+            print(dim("    uv failed, trying pip..."))
+            print()
+
+    # Ensure pip is available before trying to use it
+    if not ensure_pip_in_venv():
+        print(red("    ✗ Could not install pip in virtual environment"))
+        print(yellow("    Please install pip manually or use a different Python installation"))
+        return False
 
     # Fall back to venv pip
     result = subprocess.run(
@@ -496,10 +545,20 @@ def setup_autostart_windows():
             "Startup",
         )
         os.makedirs(startup, exist_ok=True)
+        
+        # Create .bat wrapper for manual startup (helps with debugging)
+        create_windows_bat_wrapper()
+        
+        # For autostart, use pythonw.exe (no console window)
         python_exe = get_venv_python()
+        pythonw_exe = os.path.join(os.path.dirname(python_exe), "pythonw.exe")
+        
+        # Use pythonw if available, otherwise fallback to python
+        exe_to_use = pythonw_exe if os.path.exists(pythonw_exe) else python_exe
+        
         vbs_content = (
             f'Set WshShell = CreateObject("WScript.Shell")\n'
-            f'WshShell.Run """{python_exe}"" ""{MAIN_SCRIPT}""", 0, False\n'
+            f'WshShell.Run """{exe_to_use}" ""{MAIN_SCRIPT}""", 0, False\n'
         )
         vbs_path = os.path.join(startup, f"{APP_NAME}.vbs")
         with open(vbs_path, "w") as f:
@@ -635,18 +694,63 @@ def load_config():
 
 
 # ──────────────────────── Start ShiftLang ─────────────────
+def create_windows_bat_wrapper():
+    """Create a .bat wrapper script for Windows to show errors properly."""
+    bat_path = os.path.join(PROJECT_DIR, "shiftlang.bat")
+    venv_python = get_venv_python()
+    
+    bat_content = f'''@echo off
+chcp 65001 >nul
+echo Starting ShiftLang...
+echo.
+"{venv_python}" "{MAIN_SCRIPT}"
+if errorlevel 1 (
+    echo.
+    echo ShiftLang exited with an error.
+    echo Check shiftlang_error.log for details.
+    echo.
+    pause
+)
+'''
+    try:
+        with open(bat_path, "w") as f:
+            f.write(bat_content)
+        return bat_path
+    except Exception as e:
+        print(dim(f"    Could not create .bat wrapper: {e}"))
+        return None
+
+
 def start_shiftlang():
     """Start ShiftLang in the background."""
     print(dim("    Starting ShiftLang..."))
     python_exe = get_venv_python()
+    
     try:
         if OS_NAME == "Windows":
-            # Use the venv Python to ensure dependencies are available
-            venv_python = get_venv_python()
-            subprocess.Popen(
-                [venv_python, MAIN_SCRIPT],
-                creationflags=subprocess.CREATE_NEW_CONSOLE,
-            )
+            # Create a .bat wrapper for better error visibility
+            bat_path = create_windows_bat_wrapper()
+            
+            if bat_path and os.path.exists(bat_path):
+                # Use the .bat wrapper which keeps console open on error
+                subprocess.Popen(
+                    [bat_path],
+                    creationflags=subprocess.CREATE_NEW_CONSOLE,
+                )
+            else:
+                # Fallback: run directly with pythonw.exe (no console window)
+                # This is better for autostart but harder to debug
+                pythonw_exe = os.path.join(os.path.dirname(python_exe), "pythonw.exe")
+                if os.path.exists(pythonw_exe):
+                    subprocess.Popen(
+                        [pythonw_exe, MAIN_SCRIPT],
+                        creationflags=subprocess.CREATE_NO_WINDOW,
+                    )
+                else:
+                    subprocess.Popen(
+                        [python_exe, MAIN_SCRIPT],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE,
+                    )
         else:
             # Start in background, suppress output
             subprocess.Popen(
@@ -656,6 +760,7 @@ def start_shiftlang():
                 start_new_session=True,
             )
         print(green("    ✓") + " ShiftLang started")
+        print(dim("    (If it closes immediately, run shiftlang.bat to see errors)"))
         return True
     except Exception as e:
         print(red(f"    ✗ Failed to start: {e}"))
