@@ -115,11 +115,28 @@ function Install-FromRemote {
     Write-Host "    Downloading and running installer directly..." -ForegroundColor DarkGray
     Write-Host ""
     
-    # Build arguments string for passing to remote script
-    $argString = ""
-    if ($Auto) { $argString += " --auto" }
-    if ($Update) { $argString += " --update" }
-    if ($Reconfigure) { $argString += " --reconfigure" }
+    # Ensure requirements directory exists and download requirements files
+    $reqDir = Join-Path $INSTALL_DIR "requirements"
+    if (-not (Test-Path $reqDir)) {
+        Write-Host "    Creating requirements directory..." -ForegroundColor DarkGray
+        New-Item -ItemType Directory -Path $reqDir -Force | Out-Null
+    }
+    
+    # Download requirements files
+    $reqFiles = @("requirements.txt", "requirements-base.txt")
+    foreach ($reqFile in $reqFiles) {
+        $reqUrl = "$RAW_URL/requirements/$reqFile"
+        $reqPath = Join-Path $reqDir $reqFile
+        if (-not (Test-Path $reqPath)) {
+            Write-Host "    Downloading $reqFile..." -ForegroundColor DarkGray
+            try {
+                Invoke-WebRequest -Uri $reqUrl -OutFile $reqPath -UseBasicParsing
+            }
+            catch {
+                Write-Host "    ⚠ Failed to download $reqFile" -ForegroundColor Yellow
+            }
+        }
+    }
     
     # Download and execute install.py directly
     $installPyUrl = "$RAW_URL/scripts/install.py"

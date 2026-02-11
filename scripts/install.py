@@ -16,10 +16,36 @@ import argparse
 import time
 
 # ──────────────────────── Constants ────────────────────────
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "config.json")
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP_NAME = "ShiftLang"
 OS_NAME = platform.system()
+
+
+def get_project_dir():
+    """Determine the project directory, handling both normal and temp execution."""
+    # First, try the script's parent directory (normal case)
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Check if this looks like a valid project dir (has requirements folder)
+    if os.path.exists(os.path.join(script_dir, "requirements")):
+        return script_dir
+    
+    # If not, try the standard install locations
+    home = os.path.expanduser("~")
+    standard_locations = [
+        os.path.join(home, "ShiftLang"),  # Windows/Linux/Mac default
+        os.path.join(home, ".shiftlang"),  # Alternative location
+    ]
+    
+    for loc in standard_locations:
+        if os.path.exists(os.path.join(loc, "requirements")):
+            return loc
+    
+    # Fallback: return script's parent and let the error handling below deal with it
+    return script_dir
+
+
+PROJECT_DIR = get_project_dir()
+CONFIG_FILE = os.path.join(PROJECT_DIR, "config", "config.json")
 
 # Detect display server on Linux
 IS_WAYLAND = False
