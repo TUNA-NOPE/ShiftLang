@@ -26,15 +26,8 @@ def get_project_dir():
     script_path = os.path.abspath(__file__)
     script_dir = os.path.dirname(os.path.dirname(script_path))
     
-    # Debug output
-    print(f"    Debug: Script path: {script_path}")
-    print(f"    Debug: Initial project dir: {script_dir}")
-    
     # Check if this looks like a valid project dir (has requirements folder)
     req_check = os.path.join(script_dir, "requirements")
-    print(f"    Debug: Checking requirements at: {req_check}")
-    print(f"    Debug: Requirements exists: {os.path.exists(req_check)}")
-    
     if os.path.exists(req_check):
         return script_dir
     
@@ -45,16 +38,12 @@ def get_project_dir():
         os.path.join(home, ".shiftlang"),  # Alternative location
     ]
     
-    print(f"    Debug: Home directory: {home}")
     for loc in standard_locations:
         req_path = os.path.join(loc, "requirements")
-        print(f"    Debug: Checking: {req_path} -> {os.path.exists(req_path)}")
         if os.path.exists(req_path):
-            print(f"    Debug: Found valid project dir: {loc}")
             return loc
     
     # Fallback: return script's parent and let the error handling below deal with it
-    print(f"    Debug: Falling back to: {script_dir}")
     return script_dir
 
 
@@ -627,6 +616,10 @@ def save_config(
         "openrouter_api_key": api_key,
         "openrouter_model": model,
     }
+    # Ensure config directory exists
+    config_dir = os.path.dirname(CONFIG_FILE)
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
     print(green("    ✓") + " Configuration saved")
