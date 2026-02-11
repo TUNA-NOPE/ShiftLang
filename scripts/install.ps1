@@ -141,6 +141,12 @@ function Install-FromLocal {
     $reqDir = Join-Path $INSTALL_DIR "requirements"
     Ensure-Requirements -ReqDir $reqDir
     
+    # Ensure config directory exists
+    $configDir = Join-Path $INSTALL_DIR "config"
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
+    
     # Build arguments
     $installArgs = @()
     if ($Auto) { $installArgs += "--auto" }
@@ -164,6 +170,12 @@ function Install-FromRemote {
     # Ensure requirements exist (download them)
     $reqDir = Join-Path $INSTALL_DIR "requirements"
     Ensure-Requirements -ReqDir $reqDir
+    
+    # Ensure config directory exists
+    $configDir = Join-Path $INSTALL_DIR "config"
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    }
     
     # Download install.py to temp location
     $installPyUrl = "$RAW_URL/scripts/install.py"

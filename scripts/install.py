@@ -616,10 +616,14 @@ def save_config(
         "openrouter_api_key": api_key,
         "openrouter_model": model,
     }
-    # Ensure config directory exists
-    config_dir = os.path.dirname(CONFIG_FILE)
-    if not os.path.exists(config_dir):
-        os.makedirs(config_dir, exist_ok=True)
+    # Ensure config directory exists (handle both file path and edge cases)
+    config_dir = os.path.dirname(os.path.abspath(CONFIG_FILE))
+    if config_dir and not os.path.exists(config_dir):
+        try:
+            os.makedirs(config_dir, exist_ok=True)
+        except OSError as e:
+            print(red(f"    ✗ Failed to create config directory: {e}"))
+            raise
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
     print(green("    ✓") + " Configuration saved")

@@ -85,6 +85,9 @@ fi
 
 echo ""
 
+# Ensure config directory exists
+mkdir -p "$INSTALL_DIR/config"
+
 # Run the installer - only pass through install.py compatible args
 if command -v python3 &>/dev/null; then
     python3 scripts/install.py "${INSTALL_ARGS[@]}"

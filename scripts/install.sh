@@ -10,6 +10,9 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONFIG_FILE="$SCRIPT_DIR/../config/config.json"
 
+# Ensure config directory exists
+mkdir -p "$(dirname "$CONFIG_FILE")"
+
 # Find Python
 if command -v python3 &>/dev/null; then
     PYTHON="python3"
