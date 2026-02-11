@@ -1,5 +1,9 @@
 import os
 import sys
+
+# Add parent directory to path for importing shiftlang package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import json
 import time
 import platform
