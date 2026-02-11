@@ -46,7 +46,7 @@ print(f"DEBUG: Hotkey to register: {config['hotkey']}")
 try:
     from evdev import InputDevice, categorize, ecodes
     from deep_translator import GoogleTranslator
-    from openrouter_translator import OpenRouterTranslator
+    from shiftlang import OpenRouterTranslator
 except ImportError as e:
     print(f"Missing dependency: {e}")
     print("Install with: pip install evdev deep-translator")

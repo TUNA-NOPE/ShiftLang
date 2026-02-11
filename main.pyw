@@ -6,6 +6,7 @@ import platform
 import keyboard
 import pyperclip
 from deep_translator import GoogleTranslator
+from shiftlang import OpenRouterTranslator
 
 # ──────────────────────── Import Shared Modules ─────────────
 from shiftlang import load_config, detect_is_source_language, create_translators
