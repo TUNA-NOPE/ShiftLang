@@ -501,12 +501,6 @@ def setup_autostart_windows():
             f'Set WshShell = CreateObject("WScript.Shell")\n'
             f'WshShell.Run """{python_exe}"" ""{MAIN_SCRIPT}""", 0, False\n'
         )
-        os.makedirs(startup, exist_ok=True)
-        python_exe = sys.executable
-        vbs_content = (
-            f'Set WshShell = CreateObject("WScript.Shell")\n'
-            f'WshShell.Run """{python_exe}"" ""{MAIN_SCRIPT}""", 0, False\n'
-        )
         vbs_path = os.path.join(startup, f"{APP_NAME}.vbs")
         with open(vbs_path, "w") as f:
             f.write(vbs_content)
@@ -647,8 +641,10 @@ def start_shiftlang():
     python_exe = get_venv_python()
     try:
         if OS_NAME == "Windows":
+            # Use the venv Python to ensure dependencies are available
+            venv_python = get_venv_python()
             subprocess.Popen(
-                [python_exe, MAIN_SCRIPT],
+                [venv_python, MAIN_SCRIPT],
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
         else:

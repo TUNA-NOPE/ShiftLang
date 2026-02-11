@@ -267,4 +267,28 @@ Write-Host "    ✓ Python found" -ForegroundColor Green
 Write-Host "    ✓ Git found" -ForegroundColor Green
 Write-Host ""
 
-Install-ShiftLang -PythonPath $pythonPath
+# Run installation
+try {
+    Install-ShiftLang -PythonPath $pythonPath
+    
+    # Pause to let user see the results
+    Write-Host ""
+    Write-Host "    Press any key to exit..." -ForegroundColor DarkGray
+    if ($Host.Name -eq 'ConsoleHost') {
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    } else {
+        Read-Host
+    }
+}
+catch {
+    Write-Host ""
+    Write-Host "    Installation failed: $_" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "    Press any key to exit..." -ForegroundColor DarkGray
+    if ($Host.Name -eq 'ConsoleHost') {
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    } else {
+        Read-Host
+    }
+    exit 1
+}
