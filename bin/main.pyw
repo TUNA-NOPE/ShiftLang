@@ -2,6 +2,15 @@ import os
 import sys
 import traceback
 
+# ──────────────────────── Fix Windows Console Encoding ─────────────────────
+# Windows may use a legacy codepage (e.g., cp1255 for Hebrew) that cannot
+# encode all Unicode characters. Force UTF-8 to prevent UnicodeEncodeError.
+if sys.platform == "win32" and sys.stdout:
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except (AttributeError, OSError):
+        pass  # Fallback: continue with default encoding
+
 # Add parent directory to path for importing shiftlang package
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
