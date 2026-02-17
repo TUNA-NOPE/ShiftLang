@@ -4,6 +4,160 @@
 # For languages with distinct scripts we can detect them; otherwise we default
 # to translating source→target.
 
+# Mapping from language codes to language names (for config compatibility)
+# Config stores codes like "iw" (Hebrew) but detection uses names like "hebrew"
+CODE_TO_NAME = {
+    # Semitic scripts
+    "he": "hebrew",
+    "iw": "hebrew",  # iw is legacy code for Hebrew
+    "ar": "arabic",
+    "fa": "persian",
+    "ur": "urdu",
+    "ps": "pashto",
+    "syr": "syriac",
+    "mid": "mandaic",
+    "dv": "thaana",
+    # South Asian scripts
+    "hi": "hindi",
+    "bn": "bengali",
+    "pa": "gurmukhi",
+    "gu": "gujarati",
+    "or": "oriya",
+    "ta": "tamil",
+    "te": "telugu",
+    "kn": "kannada",
+    "ml": "malayalam",
+    "si": "sinhala",
+    "th": "thai",
+    "lo": "lao",
+    "bo": "tibetan",
+    "my": "myanmar",
+    "km": "khmer",
+    "nqo": "n'ko",
+    # East Asian scripts
+    "ja": "japanese",
+    "zh": "chinese (simplified)",
+    "zh-cn": "chinese (simplified)",
+    "zh-hans": "chinese (simplified)",
+    "zh-tw": "chinese (traditional)",
+    "zh-hant": "chinese (traditional)",
+    "ko": "korean",
+    # Cyrillic scripts
+    "ru": "russian",
+    "uk": "ukrainian",
+    "bg": "bulgarian",
+    "sr": "serbian",
+    "be": "belarusian",
+    "mk": "macedonian",
+    "mn": "mongolian",
+    # European scripts
+    "el": "greek",
+    "ka": "georgian",
+    "hy": "armenian",
+    # African scripts
+    "ber": "tifinagh",
+    "tmh": "tifinagh",
+    "so": "osmanya",  # Somali uses Osmanya script sometimes
+    "bax": "bamum",
+    # Other scripts
+    "chr": "cherokee",
+    "oj": "canadian aboriginal",
+    "cr": "canadian aboriginal",
+    "sga": "ogham",
+    "got": "runic",
+    "dsr": "deseret",
+    "shw": "shavian",
+    "tai": "new tai lue",
+    "bug": "buginese",
+    "su": "sundanese",
+    "btk": "batak",
+    "lep": "lepcha",
+    "sat": "ol chiki",
+    "saz": "saurashtra",
+    "krl": "kayah li",
+    "rej": "rejang",
+    "xlc": "lycian",
+    "xcr": "carian",
+    "xld": "lydian",
+    # Common languages without unique scripts (still need entries for reverse lookup)
+    "en": "english",
+    "es": "spanish",
+    "fr": "french",
+    "de": "german",
+    "it": "italian",
+    "pt": "portuguese",
+    "nl": "dutch",
+    "pl": "polish",
+    "tr": "turkish",
+    "vi": "vietnamese",
+    "id": "indonesian",
+    "ms": "malay",
+    "fil": "filipino",
+    "tl": "filipino",
+    "sw": "swahili",
+    "af": "afrikaans",
+    "sq": "albanian",
+    "am": "amharic",
+    "az": "azerbaijani",
+    "eu": "basque",
+    "bs": "bosnian",
+    "ca": "catalan",
+    "ceb": "cebuano",
+    "ny": "chichewa",
+    "co": "corsican",
+    "hr": "croatian",
+    "cs": "czech",
+    "da": "danish",
+    "eo": "esperanto",
+    "et": "estonian",
+    "fi": "finnish",
+    "fy": "frisian",
+    "gl": "galician",
+    "ht": "haitian creole",
+    "ha": "hausa",
+    "haw": "hawaiian",
+    "hmn": "hmong",
+    "hu": "hungarian",
+    "is": "icelandic",
+    "ig": "igbo",
+    "ga": "irish",
+    "jw": "javanese",
+    "kk": "kazakh",
+    "rw": "kinyarwanda",
+    "ku": "kurdish (kurmanji)",
+    "ky": "kyrgyz",
+    "la": "latin",
+    "lv": "latvian",
+    "lt": "lithuanian",
+    "lb": "luxembourgish",
+    "mg": "malagasy",
+    "mt": "maltese",
+    "mi": "maori",
+    "mr": "marathi",
+    "ne": "nepali",
+    "no": "norwegian",
+    "nb": "norwegian",
+    "nn": "norwegian",
+    "ps": "pashto",
+    "sd": "sindhi",
+    "sk": "slovak",
+    "sl": "slovenian",
+    "so": "somali",
+    "st": "sesotho",
+    "sn": "shona",
+    "sm": "samoan",
+    "gd": "scots gaelic",
+    "tg": "tajik",
+    "tk": "turkmen",
+    "ug": "uyghur",
+    "uz": "uzbek",
+    "cy": "welsh",
+    "xh": "xhosa",
+    "yi": "yiddish",
+    "yo": "yoruba",
+    "zu": "zulu",
+}
+
 LANGUAGE_UNICODE_RANGES = {
     # Semitic scripts
     "hebrew": [("\u0590", "\u05ff")],
@@ -84,8 +238,12 @@ def detect_is_source_language(text, source_language):
     If the source language has no known script range, we always
     translate source→target (returns None for auto-detect).
     """
-    src = source_language.lower()
-    ranges = LANGUAGE_UNICODE_RANGES.get(src)
+    src: str = source_language.lower()
+
+    # Map language code to name (e.g., "iw" -> "hebrew")
+    lang_name: str = CODE_TO_NAME.get(src, src)
+
+    ranges = LANGUAGE_UNICODE_RANGES.get(lang_name)
     if not ranges:
         # For Latin-script languages (e.g. spanish↔english) we can't detect
         # by script — use source='auto' detection instead
