@@ -209,24 +209,6 @@ else:
     _PASTE_KEYS = "ctrl+v"
 
 
-# ──────────────────────── Double-CTRL Detection ────────────────
-_DOUBLE_CTRL_INTERVAL = 0.3  # Max seconds between CTRL presses
-_last_ctrl_time = 0
-
-def _on_ctrl_press():
-    """Handle CTRL key press - detect double press."""
-    global _last_ctrl_time
-    current_time = time.time()
-    
-    if current_time - _last_ctrl_time < _DOUBLE_CTRL_INTERVAL:
-        # Double CTRL detected - reset timer and trigger translation
-        _last_ctrl_time = 0
-        translate_text()
-    else:
-        # First CTRL press - record time
-        _last_ctrl_time = current_time
-
-
 # ──────────────────────── Translation Logic ────────────────
 _is_translating = False
 _last_translation_time = 0
@@ -234,8 +216,19 @@ _MIN_TRANSLATION_INTERVAL = 0.5  # Minimum seconds between translations
 
 
 def _get_hotkey_modifier_keys():
-    """Return modifier keys to wait for release (CTRL for double-CTRL activation)."""
-    return ["ctrl"]
+    """Return modifier keys to wait for release based on configured hotkey."""
+    hotkey = config["hotkey"].lower()
+    modifiers = []
+    if "ctrl" in hotkey:
+        modifiers.append("ctrl")
+    if "shift" in hotkey:
+        modifiers.append("shift")
+    if "alt" in hotkey:
+        modifiers.append("alt")
+    # Handle 'cmd' for macOS
+    if "cmd" in hotkey or "command" in hotkey:
+        modifiers.append("cmd")
+    return modifiers if modifiers else ["ctrl"]
 
 
 def translate_text():
@@ -358,9 +351,10 @@ def translate_text():
 def main():
     src = config["source_language"]
     tgt = config["target_language"]
+    hotkey = config["hotkey"]
     
     print(f"ShiftLang running — {src} ↔ {tgt}")
-    print(f"Double-press CTRL to translate selected text.")
+    print(f"Press {hotkey.upper()} to translate selected text.")
     print(f"OS: {OS_NAME}")
     print(f"Provider: {_provider}")
     print("")
@@ -368,8 +362,8 @@ def main():
     print("")
     
     try:
-        # Register CTRL key hook for double-press detection
-        keyboard.on_press_key("ctrl", lambda _: _on_ctrl_press())
+        # Register the configured hotkey
+        keyboard.add_hotkey(hotkey, translate_text, timeout=1)
         keyboard.wait()
     except Exception as e:
         tb = traceback.format_exc()
